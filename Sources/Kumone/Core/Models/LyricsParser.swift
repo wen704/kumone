@@ -34,26 +34,34 @@ struct ParsedLyrics: Hashable {
 }
 
 enum LyricsParser {
+    /// `NSRegularExpression` 而非 Swift Regex:后者是 iOS 16+ API。
+    private static let timeTag = try? NSRegularExpression(pattern: #"\[(\d+):(\d+)(?:[.:](\d+))?\]"#)
+
     /// Parses an LRC body into (time, text) pairs. Handles multiple timestamps
     /// per line and both `.` / `:` millisecond separators.
     static func parseLRC(_ lrc: String) -> [(time: TimeInterval, text: String)] {
         var result: [(TimeInterval, String)] = []
-        let timeTag = #/\[(\d+):(\d+)(?:[.:](\d+))?\]/#
+        guard let timeTag else { return [] }
 
         for rawLine in lrc.components(separatedBy: .newlines) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
-            let matches = line.matches(of: timeTag)
-            guard !matches.isEmpty else { continue }
+            let nsLine = line as NSString
+            let matches = timeTag.matches(in: line, range: NSRange(location: 0, length: nsLine.length))
             guard let lastMatch = matches.last else { continue }
-            let content = String(line[lastMatch.range.upperBound...])
+            let content = nsLine
+                .substring(from: lastMatch.range.location + lastMatch.range.length)
                 .trimmingCharacters(in: .whitespaces)
             for match in matches {
-                let min = Double(match.output.1) ?? 0
-                let sec = Double(match.output.2) ?? 0
+                let min = Double(nsLine.substring(with: match.range(at: 1))) ?? 0
+                let sec = Double(nsLine.substring(with: match.range(at: 2))) ?? 0
                 var frac = 0.0
-                if let msStr = match.output.3, let ms = Double(msStr) {
-                    frac = ms / pow(10, Double(msStr.count))
+                let msRange = match.range(at: 3)
+                if msRange.location != NSNotFound {
+                    let msStr = nsLine.substring(with: msRange)
+                    if let ms = Double(msStr) {
+                        frac = ms / pow(10, Double(msStr.count))
+                    }
                 }
                 result.append((min * 60 + sec + frac, content))
             }

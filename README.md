@@ -73,11 +73,11 @@ built-in Sparkle automatic updates (menu bar: Kumone → Check for Updates…).
 
 ### iOS / iPadOS (sideload)
 
-Every release ships an **unsigned** `Kumone-iOS-x.y.z.ipa` (iOS 16+). Kumone
+Every release ships an **unsigned** `Kumone-iOS-x.y.z.ipa` (iOS 15+). Kumone
 is an unofficial client and will not be on the App Store or TestFlight, so
 install it with a sideloading tool that signs the IPA with your own Apple ID —
 [AltStore](https://altstore.io), [SideStore](https://sidestore.io),
-[Sideloadly](https://sideloadly.io) or Xcode all work. On iOS 26+ the tab bar is the system’s native Liquid Glass; on iOS 16–25 it falls back to a simulated glass bar.
+[Sideloadly](https://sideloadly.io) or Xcode all work. On iOS 26+ the tab bar is the system’s native Liquid Glass; on iOS 15–25 it falls back to a simulated glass bar (iOS 15 also uses stack-style navigation and a sheet-based playlist-creation prompt).
 
 Updating: iOS apps can't replace themselves. Settings → About → **Check for
 Updates** tells you when a newer release exists and links to it; download the
@@ -97,7 +97,9 @@ for a manual re-sideload.
 
 ## Building
 
-Requires macOS 15+ and Xcode 26+.
+Requires macOS 15+ and Xcode 26+. The Swift package also compiles with Xcode
+16.2 — iOS/macOS 26-only symbols (Liquid Glass, tab-bar accessories) are
+compile-time gated and fall back to earlier implementations.
 
 ```bash
 swift build                    # compile

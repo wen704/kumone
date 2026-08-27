@@ -1,12 +1,14 @@
 # Project Overview
 
-This is a native **iOS application** built with **Swift 6.1+** and **SwiftUI**. The codebase targets **iOS 18.0 and later**, allowing full use of modern Swift and iOS APIs. All concurrency is handled with **Swift Concurrency** (async/await, actors, @MainActor isolation) ensuring thread-safe code.
+This is a native **iOS application** built with **Swift 6.1+** and **SwiftUI**. The codebase targets **iOS 15.0 and later**. iOS 16+ APIs must be gated with `if #available(iOS 16.0, *)` (or the `compat*` helpers in `DesignSystem/Theme.swift` and `Features/NavigationCompat.swift`); iOS 26-only SDK symbols must additionally be wrapped in `#if compiler(>=6.2)` so older toolchains (Xcode 16.2) still compile. All concurrency is handled with **Swift Concurrency** (async/await, actors, @MainActor isolation) ensuring thread-safe code.
 
 - **Frameworks & Tech:** SwiftUI for UI, Swift Concurrency with strict mode, Swift Package Manager for modular architecture
 - **Architecture:** Model-View (MV) pattern using pure SwiftUI state management. We avoid MVVM and instead leverage SwiftUI's built-in state mechanisms (@State, @Observable, @Environment, @Binding)
 - **Testing:** Swift Testing framework with modern @Test macros and #expect/#require assertions
-- **Platform:** iOS (Simulator and Device)
+- **Platform:** iOS 15+ (Simulator and Device)
+- **Navigation:** use `AppNavigationStack` / `AppNavLink` / `SheetNavigationRoot` (NavigationCompat.swift) instead of `NavigationStack` / `NavigationLink(value:)` directly
 - **Accessibility:** Full accessibility support using SwiftUI's accessibility modifiers
+- **Building the IPA locally:** run `Scripts/build-ipa.sh` from the repo root. Do NOT use `xcodebuild` (its embedded SPM sandbox fails in this environment) and always pass `--disable-sandbox` to `swift build`. Known pitfalls are documented in `ios/BUILD_NOTES.md` — read it before debugging build issues.
 
 ## Project Structure
 

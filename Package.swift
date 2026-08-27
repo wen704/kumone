@@ -1,10 +1,10 @@
-// swift-tools-version: 6.2
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "Kumone",
     defaultLocalization: "zh-Hans",
-    platforms: [.macOS("15.0"), .iOS("16.0")],
+    platforms: [.macOS("15.0"), .iOS("15.0")],
     products: [
         .executable(name: "Kumone", targets: ["KumoneLauncher"]),
         .library(name: "KumoneCore", targets: ["KumoneCore"]),

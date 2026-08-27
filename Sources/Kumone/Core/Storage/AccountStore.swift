@@ -120,7 +120,7 @@ final class ToastCenter: ObservableObject {
         current = Toast(message: message)
         dismissTask?.cancel()
         dismissTask = Task {
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
             guard !Task.isCancelled else { return }
             current = nil
         }

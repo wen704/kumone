@@ -62,7 +62,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
-        .scrollContentBackground(.hidden)
+        .compatHiddenScrollBackground()
         .safeAreaInset(edge: .bottom, spacing: 0) {
             accountFooter
         }

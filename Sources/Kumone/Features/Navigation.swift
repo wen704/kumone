@@ -70,33 +70,50 @@ enum Destination: Hashable {
     case search(String)
 }
 
-/// Registers all shared navigation destinations on a stack.
-struct DestinationsModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content.navigationDestination(for: Destination.self) { destination in
-            Group {
-                switch destination {
-                case .playlist(let id):
-                    PlaylistDetailView(playlistID: id)
-                case .album(let id):
-                    AlbumDetailView(albumID: id)
-                case .artist(let id):
-                    ArtistDetailView(artistID: id)
-                case .daily:
-                    DailySongsView()
-                case .toplists:
-                    ToplistsView()
-                case .recents:
-                    RecentsView()
-                case .collections:
-                    CollectionsView()
-                case .cloud:
-                    CloudView()
-                case .search(let query):
-                    SearchView(query: query)
-                }
+/// Renders the page for a `Destination`. Shared by the iOS 16+
+/// `navigationDestination` registration and the iOS 15 classic
+/// `NavigationLink(destination:)` links in `AppNavLink`.
+struct DestinationContent: View {
+    let destination: Destination
+
+    var body: some View {
+        Group {
+            switch destination {
+            case .playlist(let id):
+                PlaylistDetailView(playlistID: id)
+            case .album(let id):
+                AlbumDetailView(albumID: id)
+            case .artist(let id):
+                ArtistDetailView(artistID: id)
+            case .daily:
+                DailySongsView()
+            case .toplists:
+                ToplistsView()
+            case .recents:
+                RecentsView()
+            case .collections:
+                CollectionsView()
+            case .cloud:
+                CloudView()
+            case .search(let query):
+                SearchView(query: query)
             }
-            .playerContentInset()
+        }
+        .playerContentInset()
+    }
+}
+
+/// Registers the shared navigation destinations on a stack. No-op on iOS 15,
+/// where `AppNavLink` embeds its destination directly.
+struct DestinationsModifier: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 16.0, macOS 13.0, *) {
+            content.navigationDestination(for: Destination.self) { destination in
+                DestinationContent(destination: destination)
+            }
+        } else {
+            content
         }
     }
 }

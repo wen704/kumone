@@ -72,7 +72,7 @@ brew install owo-network/brew/kumone --cask
 
 ### iOS / iPadOS（侧载）
 
-每次发版都会附带**无签名**的 `Kumone-iOS-x.y.z.ipa`（iOS 16+）。Kumone 是非官方客户端，不会上架 App Store 或 TestFlight，请用侧载工具以自己的 Apple ID 签名安装 —— [AltStore](https://altstore.io)、[SideStore](https://sidestore.io)、[Sideloadly](https://sideloadly.io) 或 Xcode 均可。iOS 26+ 的 Tab Bar 使用系统原生 Liquid Glass；iOS 16–25 则回退为仿制的玻璃栏。
+每次发版都会附带**无签名**的 `Kumone-iOS-x.y.z.ipa`（iOS 15+）。Kumone 是非官方客户端，不会上架 App Store 或 TestFlight，请用侧载工具以自己的 Apple ID 签名安装 —— [AltStore](https://altstore.io)、[SideStore](https://sidestore.io)、[Sideloadly](https://sideloadly.io) 或 Xcode 均可。iOS 26+ 的 Tab Bar 使用系统原生 Liquid Glass；iOS 15–25 则回退为仿制的玻璃栏（iOS 15 另使用栈式导航与弹层式新建歌单输入）。
 
 更新：iOS 应用无法自我替换。设置 → 关于 → **检查更新** 会提示是否有新版本并给出下载链接，下载新 IPA 后用同一工具重新安装即可，登录状态与设置会保留。AltStore / SideStore 也可通过 source 自动追踪发布。
 
@@ -82,7 +82,7 @@ brew install owo-network/brew/kumone --cask
 
 ## 构建
 
-要求 macOS 15+、Xcode 26+。
+要求 macOS 15+、Xcode 26+。Swift 包在 Xcode 16.2 上也能编译——iOS/macOS 26 专属符号（Liquid Glass、Tab 底部附件等）已做编译期门控，自动回退到早期实现。
 
 ```bash
 swift build                    # 编译

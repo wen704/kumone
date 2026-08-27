@@ -10,49 +10,26 @@ struct MainWindow: View {
     @EnvironmentObject private var toasts: ToastCenter
 
     @State private var selection: SidebarItem = .home
-    @State private var path = NavigationPath()
+    @State private var path: [Destination] = []
     @State private var showLogin = false
     @State private var detailWidth: CGFloat = 0
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var visibilityBeforeNowPlaying: NavigationSplitViewVisibility?
+    /// iOS 15:NavigationView 没有可编程路径,切换侧栏选择时递增以重建
+    /// 详情列视图树,实现回到根页面(16+ 分支忽略)。
+    @State private var detailGeneration = 0
+    /// iOS 15:程序化搜索跳转的查询词,激活隐藏的 NavigationLink
+    /// (16+ 直接 append 到 path)。
+    @State private var pushedSearchQuery: String?
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selection: $selection, showLogin: $showLogin)
-                .navigationSplitViewColumnWidth(min: 200, ideal: Theme.Layout.sidebarWidth, max: 280)
-        } detail: {
-            detailStack
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.width
-                } action: { width in
-                    detailWidth = width
-                }
-        }
-        .navigationSplitViewStyle(.balanced)
-        .toolbar {
-            if #available(macOS 26.0, iOS 26.0, *) {
-                ToolbarItem(placement: .primaryAction) {
-                    SearchFieldView { query in
-                        path.append(Destination.search(query))
-                    }
-                }
-                .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: .primaryAction) {
-                    SearchFieldView { query in
-                        path.append(Destination.search(query))
-                    }
-                }
-            }
-        }
-        #if os(macOS)
-        // Immersive now-playing page: hide the whole window toolbar
-        // (sidebar toggle, navigation title, search field).
-        .toolbar(player.showNowPlaying ? .hidden : .automatic, for: .windowToolbar)
-        #endif
-        .playerChrome(detailWidth: detailWidth)
-        .environment(\.openLogin, { showLogin = true })
-        .task {
+        navigationContainer
+            #if os(macOS)
+            // Immersive now-playing page: hide the whole window toolbar
+            // (sidebar toggle, navigation title, search field).
+            .toolbar(player.showNowPlaying ? .hidden : .automatic, for: .windowToolbar)
+            #endif
+            .playerChrome(detailWidth: detailWidth)
+            .environment(\.openLogin, { showLogin = true })
+            .task {
 #if os(macOS)
             // Keep this action in the app delegate: when the user closes the
             // last WindowGroup window, there is no view left to receive a
@@ -61,50 +38,92 @@ struct MainWindow: View {
 #endif
             DesktopLyricsController.shared.sync(with: settings.showDesktopLyrics)
             await account.bootstrap()
+            }
+            .onChange(of: settings.showDesktopLyrics) { _ in
+                DesktopLyricsController.shared.sync(with: settings.showDesktopLyrics)
+            }
+            .sheet(isPresented: $showLogin) {
+                LoginSheet()
+            }
+            .overlay {
+                if player.showNowPlaying {
+                    NowPlayingView()
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .overlay(alignment: .top) {
+                if let toast = toasts.current {
+                    ToastView(toast: toast)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 12)
+                }
+            }
+            .animation(AppAnimation.smooth, value: player.showNowPlaying)
+            .animation(.spring(response: 0.3, dampingFraction: 1), value: toasts.current)
+    }
+
+    @ViewBuilder
+    private var navigationContainer: some View {
+        #if os(macOS)
+        MainWindowSplitContainer(
+            selection: $selection,
+            showLogin: $showLogin,
+            submitSearch: submitSearch
+        ) {
+            detailStack
         }
-        .onChange(of: settings.showDesktopLyrics) { _ in
-            DesktopLyricsController.shared.sync(with: settings.showDesktopLyrics)
-        }
-        // Collapse the sidebar while the immersive page is open: the split
-        // view's divider keeps its resize-cursor rect active even underneath
-        // an overlay, leaking the drag cursor onto the now-playing page (#6).
-        .onChange(of: player.showNowPlaying) { _ in
-            if player.showNowPlaying {
-                visibilityBeforeNowPlaying = columnVisibility
-                columnVisibility = .detailOnly
-            } else {
-                columnVisibility = visibilityBeforeNowPlaying ?? .all
-                visibilityBeforeNowPlaying = nil
+        #else
+        if #available(iOS 16.0, *) {
+            MainWindowSplitContainer(
+                selection: $selection,
+                showLogin: $showLogin,
+                submitSearch: submitSearch
+            ) {
+                detailStack
+            }
+        } else {
+            MainWindowSidebarLayout(
+                selection: $selection,
+                showLogin: $showLogin,
+                submitSearch: submitSearch
+            ) {
+                detailStack
             }
         }
-        .sheet(isPresented: $showLogin) {
-            LoginSheet()
-        }
-        .overlay {
-            if player.showNowPlaying {
-                NowPlayingView()
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .overlay(alignment: .top) {
-            if let toast = toasts.current {
-                ToastView(toast: toast)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .padding(.top, 12)
-            }
-        }
-        .animation(AppAnimation.smooth, value: player.showNowPlaying)
-        .animation(.spring(duration: 0.3), value: toasts.current)
+        #endif
     }
 
     private var detailStack: some View {
-        NavigationStack(path: $path) {
+        AppNavigationStack(path: $path, generation: detailGeneration) {
             rootView
                 .playerContentInset()
+                .background(
+                    // iOS 15:程序化搜索跳转的隐藏链接(见 LegacyPushLink)。
+                    LegacyPushLink(
+                        isPushed: Binding(
+                            get: { pushedSearchQuery != nil },
+                            set: { if !$0 { pushedSearchQuery = nil } }
+                        ),
+                        destination: .search(pushedSearchQuery ?? "")
+                    )
+                )
                 .appDestinations()
         }
+        .compatWidthTracking { width in
+            detailWidth = width
+        }
         .onChange(of: selection) { _ in
-            path = NavigationPath()
+            path = []
+            pushedSearchQuery = nil
+            detailGeneration += 1
+        }
+    }
+
+    private func submitSearch(_ query: String) {
+        if #available(iOS 16.0, *) {
+            path.append(Destination.search(query))
+        } else {
+            pushedSearchQuery = query
         }
     }
 
@@ -152,6 +171,84 @@ struct MainWindow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+}
+
+// MARK: - Split / sidebar containers
+
+/// iOS 16+/macOS 分栏容器;沉浸式播放页打开时收起侧栏(修复分割线
+/// 拖拽光标在覆盖层下仍可触发的问题,#6)。
+@available(iOS 16.0, macOS 13.0, *)
+private struct MainWindowSplitContainer<Detail: View>: View {
+    @Binding var selection: SidebarItem
+    @Binding var showLogin: Bool
+    let submitSearch: (String) -> Void
+    @ViewBuilder var detail: () -> Detail
+
+    @EnvironmentObject private var player: PlayerService
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var visibilityBeforeNowPlaying: NavigationSplitViewVisibility?
+
+    var body: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            SidebarView(selection: $selection, showLogin: $showLogin)
+                .navigationSplitViewColumnWidth(min: 200, ideal: Theme.Layout.sidebarWidth, max: 280)
+        } detail: {
+            detail()
+        }
+        .navigationSplitViewStyle(.balanced)
+        .toolbar {
+            // `sharedBackgroundVisibility` 是 iOS/macOS 26 SDK 符号,
+            // 旧工具链(Xcode 16.2)编译时退回普通 ToolbarItem。
+            #if compiler(>=6.2)
+            if #available(macOS 26.0, iOS 26.0, *) {
+                ToolbarItem(placement: .primaryAction) {
+                    SearchFieldView { submitSearch($0) }
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    SearchFieldView { submitSearch($0) }
+                }
+            }
+            #else
+            ToolbarItem(placement: .primaryAction) {
+                SearchFieldView { submitSearch($0) }
+            }
+            #endif
+        }
+        .onChange(of: player.showNowPlaying) { _ in
+            if player.showNowPlaying {
+                visibilityBeforeNowPlaying = columnVisibility
+                columnVisibility = .detailOnly
+            } else {
+                columnVisibility = visibilityBeforeNowPlaying ?? .all
+                visibilityBeforeNowPlaying = nil
+            }
+        }
+    }
+}
+
+/// iOS 15:NavigationSplitView 不可用,退化为固定宽度侧栏 + 详情栈。
+/// 侧栏由 selection 驱动(不含导航链接),详情列自带 NavigationView。
+private struct MainWindowSidebarLayout<Detail: View>: View {
+    @Binding var selection: SidebarItem
+    @Binding var showLogin: Bool
+    let submitSearch: (String) -> Void
+    @ViewBuilder var detail: () -> Detail
+
+    var body: some View {
+        HStack(spacing: 0) {
+            SidebarView(selection: $selection, showLogin: $showLogin)
+                .frame(width: Theme.Layout.sidebarWidth)
+            Divider()
+            detail()
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        SearchFieldView { submitSearch($0) }
+                    }
+                }
+        }
+    }
 }
 
 // MARK: - Search field

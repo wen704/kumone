@@ -6,6 +6,18 @@
 section the English bullets come first, followed by their Simplified Chinese
 counterparts. 段落格式：`## <版本号> - <日期>`，条目必须写成单行。
 
+## 0.3.9-1 - 未发布
+
+### Added / 新增
+
+- iOS: minimum system requirement lowered from iOS 16 to iOS 15. On iOS 15 the app falls back to stack-style `NavigationView` navigation, a sheet-based playlist-creation prompt and system-default toolbar/sidebar backgrounds; everything else (tabs, player, lyrics, FM, search, settings, updater) behaves the same.
+- iOS：系统要求从 iOS 16 降至 iOS 15。iOS 15 上导航退回栈式 `NavigationView`、新建歌单改用弹层输入、顶栏/侧栏背景恢复系统默认；其余功能（Tab、播放器、歌词、漫游、搜索、设置、更新）行为一致。
+
+### Improved / 改进
+
+- Build: iOS/macOS 26-only symbols (Liquid Glass `glassEffect`, `tabBarMinimizeBehavior`, tab bottom-accessory placement, toolbar shared-background) are now gated with `#if compiler(>=6.2)`, so the package also compiles on older toolchains such as Xcode 16.2.
+- 构建：iOS/macOS 26 专属符号（Liquid Glass `glassEffect`、`tabBarMinimizeBehavior`、Tab 底部附件布局、工具栏共享背景）已用 `#if compiler(>=6.2)` 门控，旧工具链（如 Xcode 16.2）也能编译本包。
+
 ## 0.3.9 - 2026-08-27
 
 ### Added / 新增

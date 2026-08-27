@@ -18,11 +18,14 @@ public struct IOSMainWindow: View {
 
     @State private var selectedTab: IOSTab = .home
     @State private var showLogin = false
-    @State private var homePath = NavigationPath()
-    @State private var explorePath = NavigationPath()
-    @State private var fmPath = NavigationPath()
-    @State private var searchPath = NavigationPath()
-    @State private var libraryPath = NavigationPath()
+    @State private var homePath: [Destination] = []
+    @State private var explorePath: [Destination] = []
+    @State private var fmPath: [Destination] = []
+    @State private var searchPath: [Destination] = []
+    @State private var libraryPath: [Destination] = []
+    /// iOS 15:NavigationView 没有可编程路径,重按 Tab 通过递增 generation
+    /// 重建该 Tab 的视图树来实现回到根页面(16+ 分支忽略)。
+    @State private var tabGenerations: [IOSTab: Int] = [:]
 
     public init() {}
 
@@ -54,7 +57,7 @@ public struct IOSMainWindow: View {
                         .padding(.top, 8)
                 }
             }
-            .animation(.spring(duration: 0.3), value: toasts.current)
+            .animation(.spring(response: 0.3, dampingFraction: 1), value: toasts.current)
     }
 
     @ViewBuilder
@@ -158,6 +161,10 @@ public struct IOSMainWindow: View {
 
     @ViewBuilder
     private var tabInterface: some View {
+        // `tabBarMinimizeBehavior` / `tabViewBottomAccessoryPlacement` 是
+        // iOS 26 SDK 符号;旧工具链(如 Xcode 16.2/iOS 18 SDK)编译时
+        // 直接走自绘 TabBar 分支。
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             iOS26TabView
                 .tabBarMinimizeBehavior(.onScrollDown)
@@ -175,6 +182,9 @@ public struct IOSMainWindow: View {
         } else {
             customTabInterface
         }
+        #else
+        customTabInterface
+        #endif
     }
 
     @available(iOS 26.0, *)
@@ -233,20 +243,22 @@ public struct IOSMainWindow: View {
 
     private func popToRoot(_ tab: IOSTab) {
         switch tab {
-        case .home: homePath = NavigationPath()
-        case .explore: explorePath = NavigationPath()
-        case .fm: fmPath = NavigationPath()
-        case .search: searchPath = NavigationPath()
-        case .library: libraryPath = NavigationPath()
+        case .home: homePath = []
+        case .explore: explorePath = []
+        case .fm: fmPath = []
+        case .search: searchPath = []
+        case .library: libraryPath = []
         }
+        tabGenerations[tab, default: 0] += 1
     }
 
     @ViewBuilder
     private func tabStack<Content: View>(
         _ tab: IOSTab,
-        @ViewBuilder _ content: () -> Content
+        // AppNavigationStack 存储闭包(逃逸),参数须标记 @escaping。
+        @ViewBuilder _ content: @escaping () -> Content
     ) -> some View {
-        NavigationStack(path: binding(for: tab)) {
+        AppNavigationStack(path: binding(for: tab), generation: tabGenerations[tab] ?? 0) {
             content().appDestinations()
         }
     }
@@ -262,7 +274,7 @@ public struct IOSMainWindow: View {
             .zIndex(selectedTab == tab ? 1 : 0)
     }
 
-    private func binding(for tab: IOSTab) -> Binding<NavigationPath> {
+    private func binding(for tab: IOSTab) -> Binding<[Destination]> {
         switch tab {
         case .home: return $homePath
         case .explore: return $explorePath
@@ -293,6 +305,7 @@ private enum NowPlayingTransitionID {
 
 // MARK: - Mini player bar for iOS
 
+#if compiler(>=6.2)
 @available(iOS 26.0, *)
 private struct IOSMiniPlayerAccessory: View {
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
@@ -311,6 +324,7 @@ private struct IOSMiniPlayerAccessory: View {
         ) ? .inlineAccessory : .bottomAccessory
     }
 }
+#endif
 
 private extension View {
     @ViewBuilder
@@ -551,21 +565,21 @@ struct IOSLibraryView: View {
             if account.hasAuthCookie {
                 Section("我的音乐") {
                     if let liked = account.likedSongsPlaylist {
-                        NavigationLink(value: Destination.playlist(liked.id)) {
+                        AppNavLink(value: .playlist(liked.id)) {
                             Label("我喜欢的音乐", systemImage: "heart.fill")
                                 .foregroundStyle(Theme.accent)
                         }
                     }
-                    NavigationLink(value: Destination.daily) {
+                    AppNavLink(value: .daily) {
                         Label("每日推荐", systemImage: "calendar")
                     }
-                    NavigationLink(value: Destination.recents) {
+                    AppNavLink(value: .recents) {
                         Label("最近播放", systemImage: "clock.fill")
                     }
-                    NavigationLink(value: Destination.collections) {
+                    AppNavLink(value: .collections) {
                         Label("我的收藏", systemImage: "star.fill")
                     }
-                    NavigationLink(value: Destination.cloud) {
+                    AppNavLink(value: .cloud) {
                         Label("音乐云盘", systemImage: "icloud.fill")
                     }
                 }
@@ -573,7 +587,7 @@ struct IOSLibraryView: View {
                 if !account.createdPlaylists.isEmpty {
                     Section {
                         ForEach(account.createdPlaylists) { playlist in
-                            NavigationLink(value: Destination.playlist(playlist.id)) {
+                            AppNavLink(value: .playlist(playlist.id)) {
                                 HStack(spacing: 10) {
                                     CachedAsyncImage(url: playlist.coverURL?.resizedImageURL(80), animated: false)
                                         .frame(width: 32, height: 32)
@@ -606,7 +620,7 @@ struct IOSLibraryView: View {
                 if !account.subscribedPlaylists.isEmpty {
                     Section("收藏的歌单") {
                         ForEach(account.subscribedPlaylists) { playlist in
-                            NavigationLink(value: Destination.playlist(playlist.id)) {
+                            AppNavLink(value: .playlist(playlist.id)) {
                                 HStack(spacing: 10) {
                                     CachedAsyncImage(url: playlist.coverURL?.resizedImageURL(80), animated: false)
                                         .frame(width: 32, height: 32)
@@ -637,7 +651,7 @@ struct IOSLibraryView: View {
             }
         }
         .sheet(isPresented: $showSettings) {
-            NavigationStack {
+            AppNavigationStack(path: .constant([])) {
                 SettingsView()
                     .navigationTitle("设置")
                     .toolbar {
@@ -649,23 +663,19 @@ struct IOSLibraryView: View {
                     }
             }
         }
-        .alert("新建歌单", isPresented: $showNewPlaylist) {
-            TextField("歌单名称", text: $newPlaylistName)
-            Button("创建") {
-                let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
-                newPlaylistName = ""
-                guard !name.isEmpty else { return }
-                Task {
-                    do {
-                        try await NeteaseAPI.createPlaylist(name: name, isPrivate: false)
-                        await account.refreshLibrary()
-                        ToastCenter.shared.show(String(localized: "歌单已创建"))
-                    } catch {
-                        ToastCenter.shared.show(error.localizedDescription)
-                    }
+        .playlistCreationPrompt(isPresented: $showNewPlaylist, name: $newPlaylistName) { name in
+            let trimmed = name.trimmingCharacters(in: .whitespaces)
+            newPlaylistName = ""
+            guard !trimmed.isEmpty else { return }
+            Task {
+                do {
+                    try await NeteaseAPI.createPlaylist(name: trimmed, isPrivate: false)
+                    await account.refreshLibrary()
+                    ToastCenter.shared.show(String(localized: "歌单已创建"))
+                } catch {
+                    ToastCenter.shared.show(error.localizedDescription)
                 }
             }
-            Button("取消", role: .cancel) { newPlaylistName = "" }
         }
     }
 }

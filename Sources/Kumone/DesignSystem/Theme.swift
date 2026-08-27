@@ -77,8 +77,53 @@ extension View {
         if #available(iOS 17.0, macOS 14.0, *) { scrollClipDisabled() } else { self }
     }
 
+    /// `contentTransition(.opacity)` is iOS 16+; iOS 15 swaps content
+    /// without a transition.
+    @ViewBuilder
+    func compatContentTransitionOpacity() -> some View {
+        if #available(iOS 16.0, macOS 13.0, *) {
+            contentTransition(.opacity)
+        } else {
+            self
+        }
+    }
+
+    /// `scrollContentBackground(.hidden)` is iOS 16+/macOS 13+; iOS 15
+    /// keeps the default list background.
+    @ViewBuilder
+    func compatHiddenScrollBackground() -> some View {
+        if #available(iOS 16.0, macOS 13.0, *) {
+            scrollContentBackground(.hidden)
+        } else {
+            self
+        }
+    }
+
+    /// `formStyle(.grouped)` is iOS 16+/macOS 13+; grouped is already the
+    /// default on older systems, so it degrades to a no-op.
+    @ViewBuilder
+    func compatGroupedFormStyle() -> some View {
+        if #available(iOS 16.0, macOS 13.0, *) {
+            formStyle(.grouped)
+        } else {
+            self
+        }
+    }
+
+    /// `onGeometryChange` is iOS 16.4+; this preference-based tracker works
+    /// on every supported OS.
+    func compatWidthTracking(_ onChange: @escaping (CGFloat) -> Void) -> some View {
+        background(
+            GeometryReader { proxy in
+                Color.clear.preference(key: WidthTrackingKey.self, value: proxy.size.width)
+            }
+        )
+        .onPreferenceChange(WidthTrackingKey.self, perform: onChange)
+    }
+
     /// Hides the toolbar background; `toolbarBackgroundVisibility` is
-    /// macOS 15+/iOS 18+, so iOS 17 falls back to `toolbarBackground`.
+    /// macOS 15+/iOS 18+, iOS 16–17 falls back to `toolbarBackground`,
+    /// and iOS 15 keeps the system default background.
     @ViewBuilder
     func compatHiddenToolbarBackground() -> some View {
         #if os(macOS)
@@ -86,22 +131,41 @@ extension View {
         #else
         if #available(iOS 18.0, *) {
             toolbarBackgroundVisibility(.hidden, for: .automatic)
-        } else {
+        } else if #available(iOS 16.0, *) {
             toolbarBackground(.hidden, for: .navigationBar)
+        } else {
+            self
         }
         #endif
     }
 
+    /// `presentationDetents([.height(360)])` is iOS 16+; iOS 15 presents the
+    /// sheet at full height.
+    @ViewBuilder
+    func compatPresentationDetentsHeight360() -> some View {
+        #if os(iOS)
+        if #available(iOS 16.0, *) {
+            presentationDetents([.height(360)])
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+
     /// Glass background with a graceful material fallback on macOS 15.
+    /// `glassEffect` 需要 Xcode 26 SDK(iOS 26 符号),`#if compiler(>=6.2)`
+    /// 让旧工具链(如 Xcode 16.2/iOS 18 SDK)编译时直接走材质降级分支。
     @ViewBuilder
     func compatGlass(interactive: Bool = false, in shape: some Shape) -> some View {
-        #if os(macOS)
+        #if compiler(>=6.2) && os(macOS)
         if #available(macOS 26.0, *) {
             self.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
             self.background(.ultraThinMaterial, in: shape)
         }
-        #elseif os(iOS)
+        #elseif compiler(>=6.2) && os(iOS)
         if #available(iOS 26.0, *) {
             self.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
@@ -110,5 +174,28 @@ extension View {
         #else
         self.background(.ultraThinMaterial, in: shape)
         #endif
+    }
+}
+
+/// `LabeledContent` is iOS 16+; this renders the same trailing-secondary
+/// layout on iOS 15 and above.
+struct CompatLabeledContent: View {
+    let title: LocalizedStringKey
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text(value)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct WidthTrackingKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }

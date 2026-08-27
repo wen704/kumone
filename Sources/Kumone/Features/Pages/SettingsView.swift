@@ -49,7 +49,7 @@ struct SettingsView: View {
             }
 
             Section("存储") {
-                LabeledContent("图片缓存", value: cacheSize)
+                CompatLabeledContent(title: "图片缓存", value: cacheSize)
                 Button("清除缓存") {
                     clearCache()
                 }
@@ -57,7 +57,7 @@ struct SettingsView: View {
 
             Section("账号") {
                 if let profile = account.profile {
-                    LabeledContent("当前账号", value: profile.nickname)
+                    CompatLabeledContent(title: "当前账号", value: profile.nickname)
                     Button("退出登录", role: .destructive) {
                         Task { await AccountStore.shared.logout() }
                     }
@@ -75,7 +75,7 @@ struct SettingsView: View {
             }
 
             Section("关于") {
-                LabeledContent("Kumone", value: appVersion)
+                CompatLabeledContent(title: "Kumone", value: appVersion)
                 #if os(iOS)
                 Button {
                     IOSUpdater.shared.check(interactive: true)
@@ -91,7 +91,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
+        .compatGroupedFormStyle()
         #if os(macOS)
         .frame(width: 440, height: 480)
         #endif
