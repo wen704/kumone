@@ -242,6 +242,10 @@ private final class SpectrumStore: @unchecked Sendable {
             }
         )
 
+        // `MTAudioProcessingTapRef` 是 CF 桥接类型:Swift 6.0(Xcode 16.2)把
+        // 出参导入为 `Unmanaged<MTAudioProcessingTap>?`,Swift 6.2(Xcode 26)
+        // 直接导入为 ARC 管理的对象,两套工具链需分别处理。
+        #if compiler(>=6.2)
         var tap: MTAudioProcessingTap?
         let err = MTAudioProcessingTapCreate(
             kCFAllocatorDefault, &callbacks,
@@ -252,6 +256,19 @@ private final class SpectrumStore: @unchecked Sendable {
             return nil
         }
         return tap
+        #else
+        var unmanaged: Unmanaged<MTAudioProcessingTap>?
+        let err = MTAudioProcessingTapCreate(
+            kCFAllocatorDefault, &callbacks,
+            kMTAudioProcessingTapCreationFlag_PostEffects, &unmanaged)
+        guard err == noErr, let unmanaged else {
+            // `finalize:` will never run, so hand the retain back by hand.
+            retained.release()
+            return nil
+        }
+        // Create 规则 +1 持有,由 takeRetainedValue 认领。
+        return unmanaged.takeRetainedValue()
+        #endif
     }
 
     private func adopt(format: AudioStreamBasicDescription) {

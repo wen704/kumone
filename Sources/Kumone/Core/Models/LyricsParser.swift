@@ -80,25 +80,29 @@ enum LyricsParser {
         return result.sorted { $0.0 < $1.0 }
     }
 
+    /// `NSRegularExpression` 而非 Swift Regex:后者是 iOS 16+ API。
+    private static let yrcLineTag = try? NSRegularExpression(pattern: #"^\[(\d+),(\d+)\]"#)
+    private static let yrcWordTag = try? NSRegularExpression(pattern: #"\((\d+),(\d+),\d+\)([^(]*)"#)
+
     /// Parses NetEase verbatim `yrc` lyrics: each content line is
     /// `[lineStartMs,lineDurMs](wStartMs,wDurMs,0)word(...)word…`. JSON metadata
     /// (credits) lines at the top don't match the `[num,num]` head and are
     /// skipped.
     static func parseYRC(_ yrc: String) -> [LyricLine] {
-        let lineTag = #/^\[(\d+),(\d+)\]/#
-        let wordTag = #/\((\d+),(\d+),\d+\)([^(]*)/#
+        guard let lineTag = yrcLineTag, let wordTag = yrcWordTag else { return [] }
         var lines: [LyricLine] = []
         var idx = 0
         for raw in yrc.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
-            guard let head = line.firstMatch(of: lineTag) else { continue }
-            let lineStart = (Double(head.output.1) ?? 0) / 1000
+            let nsLine = line as NSString
+            guard let head = lineTag.firstMatch(in: line, range: NSRange(location: 0, length: nsLine.length)) else { continue }
+            let lineStart = (Double(nsLine.substring(with: head.range(at: 1))) ?? 0) / 1000
             var words: [LyricWord] = []
             var text = ""
-            for w in line.matches(of: wordTag) {
-                let start = (Double(w.output.1) ?? 0) / 1000
-                let duration = (Double(w.output.2) ?? 0) / 1000
-                let piece = String(w.output.3)
+            for w in wordTag.matches(in: line, range: NSRange(location: 0, length: nsLine.length)) {
+                let start = (Double(nsLine.substring(with: w.range(at: 1))) ?? 0) / 1000
+                let duration = (Double(nsLine.substring(with: w.range(at: 2))) ?? 0) / 1000
+                let piece = nsLine.substring(with: w.range(at: 3))
                 words.append(LyricWord(text: piece, start: start, duration: duration))
                 text += piece
             }

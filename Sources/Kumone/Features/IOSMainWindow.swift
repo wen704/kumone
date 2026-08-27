@@ -172,12 +172,16 @@ public struct IOSMainWindow: View {
         } else {
             customTabInterface
         }
+        #else
+        customTabInterface
+        #endif
     }
 
     /// Attach the bottom mini-player accessory only when something is playing.
     /// Leaving the modifier on with empty content still renders an empty,
     /// translucent accessory platter above the tab bar when idle (#35), so we
     /// apply it conditionally.
+    #if compiler(>=6.2)
     @available(iOS 26.0, *)
     @ViewBuilder
     private var iOS26TabInterface: some View {
@@ -195,10 +199,8 @@ public struct IOSMainWindow: View {
             base
                 .animation(AppAnimation.standard, value: player.hasCurrentTrack)
         }
-        #else
-        customTabInterface
-        #endif
     }
+    #endif
 
     @available(iOS 26.0, *)
     private var iOS26TabView: some View {
