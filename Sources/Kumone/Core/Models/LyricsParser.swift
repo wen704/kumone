@@ -1,11 +1,22 @@
 import Foundation
 
+/// One timed word (or short run) inside a verbatim (yrc) lyric line.
+struct LyricWord: Hashable {
+    let text: String
+    let start: TimeInterval
+    let duration: TimeInterval
+    var end: TimeInterval { start + duration }
+}
+
 struct LyricLine: Identifiable, Hashable {
     let id: Int
     let time: TimeInterval
     let text: String
     var translation: String?
     var romaji: String?
+    /// Per-word timings for karaoke highlighting; nil when only line-level
+    /// (lrc) timing is available.
+    var words: [LyricWord]?
 }
 
 struct ParsedLyrics: Hashable {
@@ -69,6 +80,36 @@ enum LyricsParser {
         return result.sorted { $0.0 < $1.0 }
     }
 
+    /// Parses NetEase verbatim `yrc` lyrics: each content line is
+    /// `[lineStartMs,lineDurMs](wStartMs,wDurMs,0)word(...)word…`. JSON metadata
+    /// (credits) lines at the top don't match the `[num,num]` head and are
+    /// skipped.
+    static func parseYRC(_ yrc: String) -> [LyricLine] {
+        let lineTag = #/^\[(\d+),(\d+)\]/#
+        let wordTag = #/\((\d+),(\d+),\d+\)([^(]*)/#
+        var lines: [LyricLine] = []
+        var idx = 0
+        for raw in yrc.components(separatedBy: .newlines) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard let head = line.firstMatch(of: lineTag) else { continue }
+            let lineStart = (Double(head.output.1) ?? 0) / 1000
+            var words: [LyricWord] = []
+            var text = ""
+            for w in line.matches(of: wordTag) {
+                let start = (Double(w.output.1) ?? 0) / 1000
+                let duration = (Double(w.output.2) ?? 0) / 1000
+                let piece = String(w.output.3)
+                words.append(LyricWord(text: piece, start: start, duration: duration))
+                text += piece
+            }
+            let trimmed = text.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !words.isEmpty else { continue }
+            lines.append(LyricLine(id: idx, time: lineStart, text: trimmed, words: words))
+            idx += 1
+        }
+        return lines
+    }
+
     static func parse(_ response: LyricResponse) -> ParsedLyrics {
         var out = ParsedLyrics()
         out.contributor = response.lyricUser?.nickname
@@ -94,24 +135,32 @@ enum LyricsParser {
         var lines = main.enumerated().map { idx, pair in
             LyricLine(id: idx, time: pair.time, text: pair.text)
         }
+        // Prefer verbatim (word-by-word) lines when the song has them.
+        if let yrcRaw = response.yrc?.lyric, !yrcRaw.isEmpty {
+            let yrcLines = parseYRC(yrcRaw)
+            if !yrcLines.isEmpty { lines = yrcLines }
+        }
 
         func merge(_ body: String?, into keyPath: WritableKeyPath<LyricLine, String?>) {
             guard let body, !body.isEmpty else { return }
-            let secondary = parseLRC(body)
+            let secondary = parseLRC(body).filter { !$0.text.isEmpty }
             guard !secondary.isEmpty else { return }
-            var byTime: [Int: String] = [:]
-            for (time, text) in secondary where !text.isEmpty {
-                byTime[Int(time * 100)] = text
-            }
             for i in lines.indices {
-                if let text = byTime[Int(lines[i].time * 100)] {
-                    lines[i][keyPath: keyPath] = text
+                // Nearest secondary line within 0.3s: verbatim (yrc) line times
+                // can differ from the lrc-based translation/romaji by a few ms.
+                var best: (delta: TimeInterval, text: String)?
+                for (time, text) in secondary {
+                    let delta = abs(time - lines[i].time)
+                    if best == nil || delta < best!.delta { best = (delta, text) }
+                }
+                if let best, best.delta < 0.3 {
+                    lines[i][keyPath: keyPath] = best.text
                 }
             }
         }
 
-        merge(response.tlyric?.lyric, into: \.translation)
-        merge(response.romalrc?.lyric, into: \.romaji)
+        merge(response.ytlrc?.lyric ?? response.tlyric?.lyric, into: \.translation)
+        merge(response.yromalrc?.lyric ?? response.romalrc?.lyric, into: \.romaji)
 
         // Romaji is only meaningful for Japanese lyrics: fill the gaps Netease
         // left, and drop stray annotations on everything else.

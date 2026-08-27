@@ -277,6 +277,11 @@ struct LyricResponse: Decodable {
     let lrc: LyricBody?
     let tlyric: LyricBody?
     let romalrc: LyricBody?
+    /// Verbatim (word-by-word) lyrics for karaoke highlighting; only present
+    /// on the `/song/lyric/v1` endpoint and only for songs that have them.
+    let yrc: LyricBody?
+    let ytlrc: LyricBody?
+    let yromalrc: LyricBody?
     let lyricUser: LyricContributor?
     let transUser: LyricContributor?
     let nolyric: Bool?

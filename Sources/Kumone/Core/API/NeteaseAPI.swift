@@ -388,8 +388,17 @@ enum NeteaseAPI {
     }
 
     static func lyric(id: Int) async throws -> LyricResponse {
-        try await weapi(LyricResponse.self, "/song/lyric",
-                        ["id": id, "lv": -1, "kv": -1, "tv": -1, "rv": -1])
+        // `/song/lyric/v1` also returns verbatim (word-by-word) `yrc`. Fall back
+        // to the classic endpoint if it yields nothing usable, so plain lyrics
+        // never regress.
+        if let v1 = try? await weapi(LyricResponse.self, "/song/lyric/v1",
+            ["id": id, "cp": false,
+             "lv": 0, "kv": 0, "tv": 0, "rv": 0, "yv": 0, "ytv": 0, "yrv": 0]),
+            (v1.lrc?.lyric?.isEmpty == false) || (v1.yrc?.lyric?.isEmpty == false) {
+            return v1
+        }
+        return try await weapi(LyricResponse.self, "/song/lyric",
+                               ["id": id, "lv": -1, "kv": -1, "tv": -1, "rv": -1])
     }
 
     struct FMResponse: Decodable {

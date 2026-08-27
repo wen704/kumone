@@ -94,10 +94,24 @@ private struct DismissNowPlayingActionKey: EnvironmentKey {
     static let defaultValue: (() -> Void)? = nil
 }
 
+struct NowPlayingDismissDragAction {
+    let onChanged: (CGFloat) -> Void
+    let onEnded: (CGFloat, CGFloat) -> Void
+}
+
+private struct DismissNowPlayingDragActionKey: EnvironmentKey {
+    static let defaultValue: NowPlayingDismissDragAction? = nil
+}
+
 extension EnvironmentValues {
     var dismissNowPlayingAction: (() -> Void)? {
         get { self[DismissNowPlayingActionKey.self] }
         set { self[DismissNowPlayingActionKey.self] = newValue }
+    }
+
+    var dismissNowPlayingDragAction: NowPlayingDismissDragAction? {
+        get { self[DismissNowPlayingDragActionKey.self] }
+        set { self[DismissNowPlayingDragActionKey.self] = newValue }
     }
 }
 
@@ -129,12 +143,16 @@ struct IOSNowPlayingPresentation<Content: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let isInteractive = proxy.size.width < 720 && mode == .immersive
+            let isInteractive = proxy.size.width < 720 && mode != .classic
             let usesCustomDrag = isInteractive && !usesSystemInteractiveDismissal
 
             ZStack(alignment: .top) {
                 content
                     .environment(\.dismissNowPlayingAction, dismiss)
+                    .environment(
+                        \.dismissNowPlayingDragAction,
+                        dismissDragAction(usesCustomDrag: usesCustomDrag)
+                    )
 
                 if isInteractive {
                     dragIndicator
@@ -185,20 +203,41 @@ struct IOSNowPlayingPresentation<Content: View>: View {
         // oscillation between the finger and the moving hit target.
         DragGesture(minimumDistance: 3, coordinateSpace: .global)
             .onChanged { value in
-                dragOffset = max(value.translation.height, 0)
+                updateDismissDrag(value.translation.height)
             }
             .onEnded { value in
-                if NowPlayingPresentationMetrics.shouldDismiss(
-                    translation: value.translation.height,
-                    predictedTranslation: value.predictedEndTranslation.height
-                ) {
-                    dismiss()
-                } else {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
-                        dragOffset = 0
-                    }
-                }
+                finishDismissDrag(
+                    value.translation.height,
+                    value.predictedEndTranslation.height
+                )
             }
+    }
+
+    private func dismissDragAction(usesCustomDrag: Bool) -> NowPlayingDismissDragAction {
+        NowPlayingDismissDragAction(
+            onChanged: { translation in
+                guard usesCustomDrag else { return }
+                updateDismissDrag(translation)
+            },
+            onEnded: finishDismissDrag
+        )
+    }
+
+    private func updateDismissDrag(_ translation: CGFloat) {
+        dragOffset = max(translation, 0)
+    }
+
+    private func finishDismissDrag(_ translation: CGFloat, _ predictedTranslation: CGFloat) {
+        if NowPlayingPresentationMetrics.shouldDismiss(
+            translation: translation,
+            predictedTranslation: predictedTranslation
+        ) {
+            dismiss()
+        } else {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+                dragOffset = 0
+            }
+        }
     }
 
     private func dismiss() {

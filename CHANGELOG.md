@@ -6,6 +6,39 @@
 section the English bullets come first, followed by their Simplified Chinese
 counterparts. 段落格式：`## <版本号> - <日期>`，条目必须写成单行。
 
+## 0.3.12 - 2026-08-27
+
+### Improved / 改进
+
+- **iOS + macOS**: stronger contrast for karaoke (逐字) lyrics — unsung characters are dimmer, so the word-by-word highlight is more obvious. Only songs that have NetEase verbatim (`yrc`) lyrics show it; others keep line-level highlighting.
+- **iOS + macOS**：逐字歌词（卡拉OK）对比度加强——未唱的字更暗，逐字高亮更明显。仅对有网易云逐字歌词（`yrc`）的歌曲生效，其余保持整行高亮。
+
+## 0.3.11 - 2026-08-27
+
+### Added / 新增
+
+- Karaoke (word-by-word) lyrics: when a song has NetEase verbatim (`yrc`) lyrics, the active line highlights character by character — sung characters bright, the current one fading in, the rest dim — synced live to playback. Songs without verbatim lyrics keep line-level highlighting. New setting 逐字歌词（卡拉OK）, on by default.
+- 逐字歌词（卡拉OK）：当歌曲有网易云的逐字歌词（`yrc`）时，当前行会逐字高亮——已唱的字亮、正在唱的字渐亮、未唱的字暗——实时跟随播放。没有逐字歌词的歌曲保持整行高亮。设置新增「逐字歌词（卡拉OK）」，默认开启。
+
+### Fixed / 修复
+
+- iOS: turning off "启动时自动检查更新" now actually stops the launch update sheet — the 0.3.9 toggle's iOS gate had silently not been applied. (#42)
+- iOS：关闭「启动时自动检查更新」现在真的会停掉启动时的更新弹窗——0.3.9 那个开关的 iOS 侧判断此前未生效。（#42）
+
+## 0.3.10 - 2026-08-27
+
+### Added / 新增
+
+- iOS: an opt-in concise now-playing mode (简洁模式) alongside classic and immersive — focused artwork/lyrics/controls, tap-to-switch, draggable lyrics with seek, a half-screen queue, and an AirPlay entry. Default is unchanged (immersive). Thanks @AL-Pinecore (#41).
+- iOS：新增可选的「简洁模式」播放页（与经典/沉浸并列）——聚焦的封面/歌词/控制、点击切换、可拖动歌词并跳转、半屏队列、AirPlay 入口。默认仍是沉浸模式。感谢 @AL-Pinecore（#41）。
+- The four playing-indicator bars are now driven by the real audio spectrum (via MTAudioProcessingTap, with per-band adaptive windows); sources without a tappable stream keep the previous sine-wave animation. Thanks @XerWandeRer (#39, revisits #14).
+- 「正在播放」那一行的四根柱子现在由真实音频频谱驱动（MTAudioProcessingTap，每频段自适应窗口）；无法挂载 tap 的音源保持原有的正弦波动画。感谢 @XerWandeRer（#39，重启 #14）。
+
+### Fixed / 修复
+
+- iOS 26: an empty translucent block no longer appears above the tab bar when nothing is playing — the mini-player accessory was always attached; it is now attached only when there is a current track. (#35)
+- iOS 26：无歌曲播放时，Tab Bar 上方不再出现一个空的半透明块——迷你播放器的系统配件此前一直挂载，现在仅在有当前歌曲时才挂载。（#35）
+
 ## 0.3.9-1 - 未发布
 
 ### Added / 新增
