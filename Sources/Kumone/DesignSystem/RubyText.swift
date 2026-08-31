@@ -144,9 +144,11 @@ enum RubyAttributedString {
 /// Draws a lyric line with furigana over the kanji.
 ///
 /// SwiftUI's `Text` has no ruby support and TextKit ignores CTRubyAnnotation,
-/// so the line is drawn with Core Text inside a `Canvas`. A `Layout` wrapper
-/// asks the framesetter how tall the line will be at the proposed width, which
-/// keeps the view participating in normal SwiftUI sizing and wrapping.
+/// so the line is drawn with Core Text inside a `Canvas`. On iOS 16 / macOS 13+
+/// a `Layout` wrapper asks the framesetter how tall the line will be at the
+/// proposed width, which keeps the view participating in normal SwiftUI sizing
+/// and wrapping; iOS 15 falls back to `RubyTextFallback`, which measures the
+/// offered width instead.
 struct RubyText: View, Animatable {
     private var segments: [RubySegment]
     private var size: CGFloat
@@ -205,21 +207,31 @@ struct RubyText: View, Animatable {
         )
         let attributed = RubyAttributedString.make(segments, style: style, alphas: alphas)
 
-        return RubyTextLayout(attributed: attributed) {
-            Canvas(rendersAsynchronously: false) { context, canvasSize in
-                context.withCGContext { cgContext in
-                    cgContext.saveGState()
-                    cgContext.textMatrix = .identity
-                    // Core Text draws bottom-up; SwiftUI hands over a top-down context.
-                    cgContext.translateBy(x: 0, y: canvasSize.height)
-                    cgContext.scaleBy(x: 1, y: -1)
-                    RubyAttributedString.draw(
-                        attributed,
-                        in: CGRect(origin: .zero, size: canvasSize),
-                        context: cgContext
-                    )
-                    cgContext.restoreGState()
-                }
+        if #available(iOS 16.0, macOS 13.0, *) {
+            RubyTextLayout(attributed: attributed) {
+                rubyCanvas(attributed)
+            }
+        } else {
+            RubyTextFallback(attributed: attributed) {
+                rubyCanvas(attributed)
+            }
+        }
+    }
+
+    private func rubyCanvas(_ attributed: NSAttributedString) -> some View {
+        Canvas(rendersAsynchronously: false) { context, canvasSize in
+            context.withCGContext { cgContext in
+                cgContext.saveGState()
+                cgContext.textMatrix = .identity
+                // Core Text draws bottom-up; SwiftUI hands over a top-down context.
+                cgContext.translateBy(x: 0, y: canvasSize.height)
+                cgContext.scaleBy(x: 1, y: -1)
+                RubyAttributedString.draw(
+                    attributed,
+                    in: CGRect(origin: .zero, size: canvasSize),
+                    context: cgContext
+                )
+                cgContext.restoreGState()
             }
         }
     }
@@ -232,6 +244,7 @@ private final class AttributedBox: @unchecked Sendable {
     init(_ string: NSAttributedString) { self.string = string }
 }
 
+@available(iOS 16.0, macOS 13.0, *)
 private struct RubyTextLayout: Layout {
     private let box: AttributedBox
 
@@ -254,6 +267,46 @@ private struct RubyTextLayout: Layout {
         for subview in subviews {
             subview.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
         }
+    }
+}
+
+/// iOS 15 has no `Layout`; the width the parent offered is read back through a
+/// background `GeometryReader` and the height pinned to the framesetter's
+/// answer for it. The pair settles after one extra layout pass on first
+/// render, and only moves again when the container's width does.
+private struct RubyTextFallback<Content: View>: View {
+    private let box: AttributedBox
+    private let content: Content
+
+    @State private var offeredWidth: CGFloat?
+
+    init(attributed: NSAttributedString, @ViewBuilder content: () -> Content) {
+        box = AttributedBox(attributed)
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .frame(height: measuredHeight)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(key: OfferedWidthKey.self, value: proxy.size.width)
+                }
+            )
+            .onPreferenceChange(OfferedWidthKey.self) { offeredWidth = $0 }
+    }
+
+    private var measuredHeight: CGFloat {
+        let width = offeredWidth.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            ?? .greatestFiniteMagnitude
+        return ceil(RubyAttributedString.fittedSize(box.string, width: width).height)
+    }
+}
+
+private struct OfferedWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

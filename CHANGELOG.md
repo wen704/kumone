@@ -6,6 +6,23 @@
 section the English bullets come first, followed by their Simplified Chinese
 counterparts. 段落格式：`## <版本号> - <日期>`，条目必须写成单行。
 
+## 0.3.15-0 - 2026-08-31
+
+### Added / 新增
+
+- **iOS + macOS**: synced main 0.3.13–0.3.14 — furigana (振假名) over the kanji in Japanese lyrics composing with the karaoke wipe, a 3-way 歌词注音 setting (无 / 罗马音 / 振假名), and a retro vinyl record-player now-playing mode (黑胶模式) with swipe-to-switch, opt in from Settings (the default stays 沉浸模式). Thanks @xyspg (#53) and @MikeChongCan (#55).
+- **iOS + macOS**：同步 main 0.3.13–0.3.14——日文歌词汉字上方显示振假名（与逐字高亮叠加），「歌词注音」改为三档设置（无 / 罗马音 / 振假名）；新增黑胶唱片播放页模式（黑胶模式），矢量唱片 + 唱臂、可滑动切换，默认仍是沉浸模式，可在设置中选择。感谢 @xyspg（#53）与 @MikeChongCan（#55）。
+
+### Fixed / 修复
+
+- **iOS 15**: furigana lyrics now build and render on iOS 15 — the renderer merged from main used the iOS 16-only `Layout` protocol; it now falls back to an equivalent measured layout, so line wrapping and heights stay right, while iOS 16 / macOS keep the original `Layout` path.
+- **iOS 15**：振假名歌词在 iOS 15 上可正常编译与渲染——合并自 main 的渲染器用到了 iOS 16 专属的 `Layout` 协议；现降级为等效的测量式布局，换行与行高不变，iOS 16 / macOS 仍走原 `Layout` 路径。
+
+### Improved / 改进
+
+- The fixes and improvements synced from main (mini-player cover no longer flashing on tab switch, the now-playing zoom transition anchored on the mini player again, two-column 精选 / 搜索 / 收藏 cards on iPhone, macOS single main window and desktop-lyrics horizontal-centre toggle) are all adapted and included in this iOS 15 release. (#46, #47, #52, #57, #48)
+- 同步自 main 的修复与改进（切换 Tab 时底部播放栏封面不再闪烁、播放页 zoom 转场重新以迷你播放器为锚、iPhone 上 精选 / 搜索 / 收藏 双列卡片、macOS 单主窗口与「桌面歌词水平居中」开关）均已适配 iOS 15 并包含在本版中。（#46、#47、#52、#57、#48）
+
 ## 0.3.14 - 2026-08-29
 
 ### Added / 新增
