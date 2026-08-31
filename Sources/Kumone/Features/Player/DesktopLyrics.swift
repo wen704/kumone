@@ -89,23 +89,30 @@ private struct DesktopLyricsSurface: View {
 
     var body: some View {
         GeometryReader { geo in
-            let base = CGPoint(x: geo.size.width * xFactor, y: geo.size.height * yFactor)
+            let centered = settings.desktopLyricsCentered
+            let effectiveX = centered ? 0.5 : xFactor
+            let base = CGPoint(x: geo.size.width * effectiveX, y: geo.size.height * yFactor)
             DesktopLyricsBox()
-                .position(x: base.x + dragOffset.width, y: base.y + dragOffset.height)
+                .position(x: base.x + (centered ? 0 : dragOffset.width),
+                          y: base.y + dragOffset.height)
                 .gesture(
                     // Global coordinate space: measuring the drag in the box's
                     // own (moving) space feedback-loops and flings it off screen.
                     DragGesture(coordinateSpace: .global)
                         .onChanged { value in
-                            dragOffset = value.translation
+                            // When centred, only vertical movement matters.
+                            dragOffset = centered
+                                ? CGSize(width: 0, height: value.translation.height)
+                                : value.translation
                         }
                         .onEnded { value in
-                            var x = (base.x + value.translation.width) / geo.size.width
+                            if !centered {
+                                var x = (base.x + value.translation.width) / geo.size.width
+                                if abs(x - 0.5) * geo.size.width < 8 { x = 0.5 }
+                                xFactor = min(max(x, 0.02), 0.98)
+                            }
                             var y = (base.y + value.translation.height) / geo.size.height
-                            // magnetic snap to the screen center lines
-                            if abs(x - 0.5) * geo.size.width < 8 { x = 0.5 }
                             if abs(y - 0.5) * geo.size.height < 8 { y = 0.5 }
-                            xFactor = min(max(x, 0.02), 0.98)
                             yFactor = min(max(y, 0.02), 0.98)
                             dragOffset = .zero
                         }
@@ -134,11 +141,23 @@ private struct DesktopLyricsBox: View {
                 // The box itself stays put; only the text crossfades and the
                 // capsule width eases to the new line's size.
                 VStack(spacing: 5) {
-                    Text(line.text)
-                        .font(.system(size: 26, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
-                        .contentTransition(.opacity)
+                    if settings.lyricsAnnotation == .romaji, let romaji = line.romaji {
+                        Text(romaji)
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.78))
+                            .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                            .contentTransition(.opacity)
+                    }
+                    LyricText(
+                        line: line,
+                        size: 26,
+                        weight: .bold,
+                        color: .white,
+                        alignment: .center,
+                        rounded: true
+                    )
+                    .shadow(color: .black.opacity(0.5), radius: 3, y: 1)
+                    .contentTransition(.opacity)
                     if settings.showLyricsTranslation, let translation = line.translation {
                         Text(translation)
                             .font(.system(size: 16, weight: .semibold, design: .rounded))

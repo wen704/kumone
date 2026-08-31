@@ -3,6 +3,7 @@ import SwiftUI
 struct PlayerBar: View {
     @EnvironmentObject private var player: PlayerService
     @EnvironmentObject private var account: AccountStore
+    @EnvironmentObject private var settings: SettingsManager
 
     var body: some View {
         GeometryReader { proxy in
@@ -169,9 +170,9 @@ struct PlayerBar: View {
             .help("歌词")
             PlayerIconButton(
                 icon: "inset.filled.bottomthird.square", size: 13,
-                isActive: SettingsManager.shared.showDesktopLyrics
+                isActive: settings.showDesktopLyrics
             ) {
-                SettingsManager.shared.showDesktopLyrics.toggle()
+                settings.showDesktopLyrics.toggle()
             }
             .help("桌面歌词")
             PlayerIconButton(

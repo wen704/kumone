@@ -130,14 +130,19 @@ struct LyricsPanel: View {
             player.seek(to: line.time)
         } label: {
             VStack(alignment: .leading, spacing: 3) {
-                if settings.showLyricsRomaji, let romaji = line.romaji {
+                if settings.lyricsAnnotation == .romaji, let romaji = line.romaji {
                     Text(romaji)
                         .font(.system(size: isActive ? 12 : 11))
                         .foregroundStyle(isActive ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
                 }
-                Text(line.text.isEmpty ? "♪" : line.text)
-                    .font(.system(size: isActive ? 16 : 14, weight: isActive ? .bold : .medium))
-                    .foregroundStyle(isActive ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                LyricText(
+                    line: line,
+                    size: isActive ? 16 : 14,
+                    weight: isActive ? .bold : .medium,
+                    // Core Text needs a resolved colour, so the hierarchical
+                    // styles the other rows use are spelled out here.
+                    color: isActive ? .primary : .secondary
+                )
                 if settings.showLyricsTranslation, let translation = line.translation {
                     Text(translation)
                         .font(.system(size: isActive ? 13 : 12))

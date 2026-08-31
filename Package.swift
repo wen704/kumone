@@ -39,5 +39,10 @@ let package = Package(
                 .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
             ]
         ),
+        .testTarget(
+            name: "KumoneCoreTests",
+            dependencies: ["KumoneCore"],
+            path: "Tests/KumoneCoreTests"
+        ),
     ]
 )

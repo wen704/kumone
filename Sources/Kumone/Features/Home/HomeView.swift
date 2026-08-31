@@ -440,12 +440,12 @@ struct CoverCardBody: View {
     var onPlay: (() -> Void)?
 
     @State private var isHovering = false
+    @Environment(\.flexibleCardWidth) private var flexibleWidth
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottomLeading) {
-                CachedAsyncImage(url: coverURL)
-                    .frame(width: size, height: size)
+                artwork
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.standard, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: Theme.Radius.standard, style: .continuous)
@@ -461,26 +461,37 @@ struct CoverCardBody: View {
                         .padding(8)
                 }
             }
-            .frame(width: size, height: size)
 
             Text(title)
                 .font(.system(size: 13, weight: .medium))
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
                 .foregroundStyle(.primary)
-                .frame(maxWidth: size, alignment: .leading)
+                .frame(maxWidth: flexibleWidth ? .infinity : size, alignment: .leading)
             if let subtitle, !subtitle.isEmpty {
                 Text(subtitle)
                     .font(.system(size: 11))
                     .lineLimit(1)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: size, alignment: .leading)
+                    .frame(maxWidth: flexibleWidth ? .infinity : size, alignment: .leading)
             }
         }
-        .frame(width: size, alignment: .leading)
+        .frame(maxWidth: flexibleWidth ? .infinity : size, alignment: .leading)
         .contentShape(Rectangle())
         #if os(macOS)
         .onHover { isHovering = $0 }
         #endif
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
+        if flexibleWidth {
+            CachedAsyncImage(url: coverURL)
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+        } else {
+            CachedAsyncImage(url: coverURL)
+                .frame(width: size, height: size)
+        }
     }
 }

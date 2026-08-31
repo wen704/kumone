@@ -14,6 +14,9 @@ struct LyricLine: Identifiable, Hashable {
     let text: String
     var translation: String?
     var romaji: String?
+    /// Base text split so each reading sits over the kanji it belongs to.
+    /// Nil when there is nothing to annotate.
+    var furigana: [RubySegment]?
     /// Per-word timings for karaoke highlighting; nil when only line-level
     /// (lrc) timing is available.
     var words: [LyricWord]?
@@ -166,11 +169,16 @@ enum LyricsParser {
         merge(response.ytlrc?.lyric ?? response.tlyric?.lyric, into: \.translation)
         merge(response.yromalrc?.lyric ?? response.romalrc?.lyric, into: \.romaji)
 
-        // Romaji is only meaningful for Japanese lyrics: fill the gaps Netease
-        // left, and drop stray annotations on everything else.
+        // Readings are only meaningful for Japanese lyrics: fill the romaji
+        // gaps Netease left, annotate the kanji, and drop stray annotations on
+        // everything else. Both are done here rather than in the view so a line
+        // is analysed once per track instead of once per frame.
         if RomajiTranscriber.isJapanese(lines.map(\.text)) {
-            for i in lines.indices where lines[i].romaji == nil {
-                lines[i].romaji = RomajiTranscriber.transcribe(lines[i].text)
+            for i in lines.indices {
+                if lines[i].romaji == nil {
+                    lines[i].romaji = RomajiTranscriber.transcribe(lines[i].text)
+                }
+                lines[i].furigana = Furigana.segments(for: lines[i].text)
             }
         } else {
             for i in lines.indices {

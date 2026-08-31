@@ -6,7 +6,7 @@ import SwiftUI
 actor ImageCache {
     static let shared = ImageCache()
 
-    private let memory = NSCache<NSString, PlatformImage>()
+    private nonisolated(unsafe) let memory = NSCache<NSString, PlatformImage>()
     private let diskURL: URL
     private var inflight: [String: Task<PlatformImage?, Never>] = [:]
 
@@ -49,6 +49,13 @@ actor ImageCache {
         return result
     }
 
+    /// Synchronous in-memory lookup — safe off the actor (`NSCache` is
+    /// thread-safe). Returns nil unless the image is resident in memory; use
+    /// `image(for:)` for disk/network loads.
+    nonisolated func cachedImage(for url: URL) -> PlatformImage? {
+        memory.object(forKey: Self.cacheKey(for: url) as NSString)
+    }
+
     private static func cacheKey(for url: URL) -> String {
         let digest = Insecure.MD5.hash(data: Data(url.absoluteString.utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
@@ -63,6 +70,19 @@ struct CachedAsyncImage<Placeholder: View>: View {
 
     @State private var image: PlatformImage?
     @State private var loadedURL: URL?
+
+    init(url: URL?, animated: Bool = true,
+         @ViewBuilder placeholder: @escaping () -> Placeholder) {
+        self.url = url
+        self.animated = animated
+        self.placeholder = placeholder
+        // Seed from the in-memory cache so a re-created view (e.g. the iOS 26
+        // tab-bar accessory rebuilt on a tab switch, #46) shows already-decoded
+        // artwork immediately instead of flashing the placeholder.
+        let seeded = url.flatMap { ImageCache.shared.cachedImage(for: $0) }
+        _image = State(initialValue: seeded)
+        _loadedURL = State(initialValue: seeded == nil ? nil : url)
+    }
 
     var body: some View {
         ZStack {
@@ -81,6 +101,12 @@ struct CachedAsyncImage<Placeholder: View>: View {
                 return
             }
             guard url != loadedURL else { return }
+            // Synchronous memory hit first — no actor hop, no placeholder frame.
+            if let memoryHit = ImageCache.shared.cachedImage(for: url) {
+                image = memoryHit
+                loadedURL = url
+                return
+            }
             if let cached = await ImageCache.shared.image(for: url) {
                 guard !Task.isCancelled else { return }
                 image = cached

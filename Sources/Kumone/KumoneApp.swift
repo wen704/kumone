@@ -12,7 +12,7 @@ public struct KumoneApp: App {
     public init() {}
 
     public var body: some Scene {
-        WindowGroup("Kumone", id: "main") {
+        Window("Kumone", id: "main") {
             MainWindow()
                 .environmentObject(player)
                 .environmentObject(account)
@@ -140,7 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }) {
             openMainWindow?()
         }
-        return true
+        // The reopen request is fully handled above. Letting AppKit handle it
+        // again can enqueue another SwiftUI scene request.
+        return false
     }
 }
 #endif

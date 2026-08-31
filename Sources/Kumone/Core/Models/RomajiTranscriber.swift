@@ -34,7 +34,11 @@ enum RomajiTranscriber {
         let trimmed = text.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
 
-        let source = trimmed as CFString
+        // The analyser answers with the dictionary reading, which for a
+        // handful of words is not the one anybody sings: 私 comes back as
+        // わたくし. Rewriting those to kana first is what turns `watakushi`
+        // into `watashi`.
+        let source = ReadingOverrides.applied(to: trimmed) as CFString
         let range = CFRangeMake(0, CFStringGetLength(source))
         let tokenizer = CFStringTokenizerCreate(
             kCFAllocatorDefault, source, range,
@@ -59,12 +63,37 @@ enum RomajiTranscriber {
         }
 
         guard transcribedAny else { return nil }
-        let romaji = pieces.joined(separator: " ")
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
+        let romaji = join(pieces)
         // Latin-only lines transcribe to themselves — don't echo the lyric.
         guard !romaji.isEmpty, !isEquivalent(romaji, trimmed) else { return nil }
         return romaji
+    }
+
+    /// The tokenizer breaks a word after its sokuon, and transcribes the
+    /// trailing っ as `~tsu`: だった comes back as `da~tsu` + `ta`. Spelling
+    /// that out as written gives `da~tsu ta`, so the marker is folded into the
+    /// syllable it belongs to by doubling that syllable's first consonant.
+    private static func join(_ pieces: [String]) -> String {
+        let sokuon = "~tsu"
+        var result: [String] = []
+        var geminateNext = false
+
+        for piece in pieces {
+            var piece = piece
+            let endsInSokuon = piece.hasSuffix(sokuon)
+            if endsInSokuon { piece.removeLast(sokuon.count) }
+
+            if geminateNext, let initial = piece.first, initial.isLetter, !result.isEmpty {
+                result[result.count - 1] += String(initial) + piece
+            } else if !piece.isEmpty {
+                result.append(piece)
+            }
+            geminateNext = endsInSokuon
+        }
+
+        return result.joined(separator: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
     }
 
     private static func isEquivalent(_ lhs: String, _ rhs: String) -> Bool {

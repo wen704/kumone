@@ -206,6 +206,11 @@
 "浅色" = "Light";
 "深色" = "Dark";
 "显示歌词翻译" = "Show Lyrics Translation";
+"日文歌词读音" = "Japanese Lyrics Reading";
+"关闭" = "Off";
+"罗马音" = "Romaji";
+"汉字读音" = "Furigana";
+"罗马音在歌词上方另起一行，汉字读音把假名标在汉字正上方；缺少官方罗马音时自动生成读音" = "Romaji goes on its own line above the lyric; furigana sits directly over the kanji. Readings are generated on device when NetEase ships no official romaji";
 "桌面歌词" = "Desktop Lyrics";
 "在屏幕上悬浮显示当前歌词，可拖动调整位置" = "Float the current lyric line on screen; drag to reposition";
 "存储" = "Storage";

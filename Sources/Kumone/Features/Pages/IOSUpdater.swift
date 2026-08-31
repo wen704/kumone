@@ -244,8 +244,11 @@ struct IOSUpdaterSheet: View {
     }
 
     private var laterButton: some View {
-        Button("稍后") { dismiss() }
-            .buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(.secondary)
+        Button("稍后") {
+            IOSUpdater.shared.showSheet = false
+            dismiss()
+        }
+        .buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(.secondary)
     }
 
     private var doneButton: some View {
