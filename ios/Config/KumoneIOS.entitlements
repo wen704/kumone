@@ -30,5 +30,18 @@
 	</array>
     
 	-->
+
+	<!--
+		CarPlay 音频能力需要 Apple 单独授权（提交 CarPlay 申请），未授权时真机编译会报：
+		"Entitlement com.apple.developer.carplay-audio not found and could not be included in profile"。
+		默认保持注释；如需启用 CarPlay：
+		1. 在 Apple Developer 后台为你的 App ID 开通 CarPlay (Audio) 能力
+		2. 取消下面这段注释并重新签名
+		3. 同时把 ios/Config/Info.plist 里的 CarPlay 相关键保持开启
+	-->
+	<!--
+	<key>com.apple.developer.carplay-audio</key>
+	<true/>
+	-->
 </dict>
 </plist>

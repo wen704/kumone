@@ -13,7 +13,7 @@ PRODUCT_BUNDLE_IDENTIFIER = sb.moe.kumone
 INFOPLIST_KEY_CFBundleDisplayName = Kumone
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
-DEVELOPMENT_TEAM = 
+DEVELOPMENT_TEAM =
 CODE_SIGN_STYLE = Automatic
 
 // ==========================================
@@ -28,12 +28,14 @@ TARGETED_DEVICE_FAMILY = 1,2
 // Info PLIST
 // ==========================================
 GENERATE_INFOPLIST_FILE = YES
-// Without a launch-screen declaration iOS letterboxes the app
-// in legacy compatibility mode (black bars top and bottom).
-INFOPLIST_KEY_UILaunchScreen_Generation = YES
-// UIBackgroundModes has no INFOPLIST_KEY_ build setting — it must come
-// from a partial Info.plist merged with the generated one.
-INFOPLIST_FILE = Config/Info.plist
+// The launch screen is declared explicitly as `UILaunchScreen` in
+// Config/Info.plist. Do NOT re-add INFOPLIST_KEY_UILaunchScreen_Generation:
+// it emitted a malformed, nested UILaunchScreen (a UILaunchScreen dict
+// containing another UILaunchScreen dict), which iOS ignores — leaving large
+// devices letterboxed in compatibility mode (#71).
+// UIBackgroundModes likewise has no INFOPLIST_KEY_ setting and must come
+// from the partial Info.plist merged with the generated one.
+KUMONE_INFOPLIST_FILE = Config/Info.plist
 INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationLandscapeRight UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown
 
@@ -41,4 +43,17 @@ INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationLand
 // Entitlements
 // ==========================================
 // AI agents can modify Config/KumoneIOS.entitlements to add capabilities
-CODE_SIGN_ENTITLEMENTS = Config/KumoneIOS.entitlements
+KUMONE_ENTITLEMENTS_FILE = Config/KumoneIOS.entitlements
+
+// ==========================================
+// Optional capability overlays
+// ==========================================
+// CarPlay.local.xcconfig is written by `make configure-carplay` and is NOT tracked
+// by git. When absent (the default, and what CI builds), the two settings below keep
+// their plain values above and the app ships with no CarPlay entitlement and no
+// CarPlay scene declaration. When present, it repoints them at generated copies that
+// add both. `#include?` is the optional form — a missing file is not an error.
+#include? "CarPlay.local.xcconfig"
+
+INFOPLIST_FILE = $(KUMONE_INFOPLIST_FILE)
+CODE_SIGN_ENTITLEMENTS = $(KUMONE_ENTITLEMENTS_FILE)

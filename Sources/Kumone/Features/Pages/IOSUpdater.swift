@@ -30,6 +30,10 @@ final class IOSUpdater: NSObject, ObservableObject {
 
     private var downloadTask: URLSessionDownloadTask?
     private var progressContinuation: CheckedContinuation<URL, Error>?
+    /// Destination filename for the current download. Set on the main actor in
+    /// `download(_:)` before the task starts, then read once from the download
+    /// delegate queue — the download is single-flight, so this hand-off is safe.
+    nonisolated(unsafe) private var pendingDownloadFilename = "Kumone.ipa"
 
     func check(interactive: Bool) {
         phase = .checking
@@ -82,19 +86,21 @@ final class IOSUpdater: NSObject, ObservableObject {
         }
     }
 
-    /// Non-TrollStore path: download the IPA ourselves (with a progress ring),
-    /// then present a share/save sheet to pass it to a signer (AltStore, etc.).
+    /// Non-TrollStore path: download the IPA into Documents (findable in the
+    /// Files app under On My iPhone ▸ Kumone), then open the share sheet so the
+    /// user can Save to Files or hand it straight to a signing app.
     func download(_ release: ReleaseChecker.Release) {
         guard let ipaURL = release.ipaURL else {
             openReleasePage(release)
             return
         }
+        pendingDownloadFilename = "Kumone-\(release.version).ipa"
         phase = .downloading(0)
         Task {
             do {
                 let localURL = try await downloadIPA(from: ipaURL)
                 phase = .readyToInstall(localURL)
-                presentShareSheet(for: localURL)
+                share(localURL)
             } catch {
                 phase = .failed(error.localizedDescription)
             }
@@ -117,12 +123,28 @@ final class IOSUpdater: NSObject, ObservableObject {
         }
     }
 
-    private func presentShareSheet(for url: URL) {
+    /// Present the system share sheet for the downloaded IPA. This offers both
+    /// "Save to Files" and "Copy to <app>" for any installed signing tool
+    /// (全能签 / ESign / AltStore / Sideloadly …) that registers as an `.ipa`
+    /// document handler — the direct import path requested in #50. Re-invokable
+    /// from the "导入到签名工具" button in the sheet.
+    func share(_ url: URL) {
         guard let scene = UIApplication.shared.connectedScenes
             .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
               let root = scene.keyWindow?.rootViewController else { return }
-        let picker = UIDocumentPickerViewController(forExporting: [url])
-        root.present(picker, animated: true)
+        // Present on top of whatever is frontmost (the update sheet is itself a
+        // presented controller).
+        var presenter = root
+        while let next = presenter.presentedViewController { presenter = next }
+        let activity = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        // iPad requires a popover anchor.
+        if let pop = activity.popoverPresentationController {
+            pop.sourceView = presenter.view
+            pop.sourceRect = CGRect(x: presenter.view.bounds.midX,
+                                    y: presenter.view.bounds.midY, width: 0, height: 0)
+            pop.permittedArrowDirections = []
+        }
+        presenter.present(activity, animated: true)
     }
 }
 
@@ -139,9 +161,14 @@ extension IOSUpdater: URLSessionDownloadDelegate {
 
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                                 didFinishDownloadingTo location: URL) {
-        // Move to a stable .ipa path before the temp file is reaped.
-        let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Kumone-update.ipa")
+        // Move into Documents (findable in Files under On My iPhone ▸ Kumone via
+        // UIFileSharingEnabled) before the temp download is reaped.
+        let dir = (try? FileManager.default.url(for: .documentDirectory,
+                                                in: .userDomainMask,
+                                                appropriateFor: nil,
+                                                create: true))
+            ?? FileManager.default.temporaryDirectory
+        let dest = dir.appendingPathComponent(pendingDownloadFilename)
         try? FileManager.default.removeItem(at: dest)
         let moved = (try? { try FileManager.default.moveItem(at: location, to: dest); return true }()) ?? false
         let result = moved ? dest : location
@@ -203,11 +230,14 @@ struct IOSUpdaterSheet: View {
                 Text("正在下载 \(Int(progress * 100))%")
                     .font(.headline).monospacedDigit()
 
-            case .readyToInstall:
+            case .readyToInstall(let url):
                 Image(systemName: "square.and.arrow.down.fill")
                     .font(.system(size: 40)).foregroundStyle(Theme.accent)
-                Text("已下载，请用侧载工具安装").font(.headline)
+                Text("下载完成").font(.headline)
+                Text("已保存到「文件」App ▸ 我的 iPhone ▸ Kumone。用下方按钮直接导入签名工具（全能签 / ESign 等），或在「文件」里手动打开。")
+                    .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
+                primaryButton("导入到签名工具") { updater.share(url) }
                 doneButton
 
             case .handedOff:

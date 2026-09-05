@@ -25,7 +25,10 @@ targets:
         product: KumoneIOSFeature
     settings:
       base:
-        CODE_SIGN_ENTITLEMENTS: Config/KumoneIOS.entitlements
+        # CODE_SIGN_ENTITLEMENTS is deliberately NOT set here. Target-level build
+        # settings override xcconfig, which would pin the entitlements file and
+        # silently defeat the CarPlay overlay in Config/Shared.xcconfig. The
+        # setting lives there instead, behind $(KUMONE_ENTITLEMENTS_FILE).
         ENABLE_PREVIEWS: YES
   KumoneIOSUITests:
     type: bundle.ui-testing

@@ -41,6 +41,7 @@ Built with SwiftUI · Talks directly to NetEase's real API · Sparkle auto-updat
 - 🏠 **Home** — daily recommendations, Personal FM, Heartbeat Mode, recommended playlists, radar playlists (Personal Radar family, personalized per account), charts, new albums, recommended artists
 - 🧭 **Explore** — category playlists (curated / official / charts / mood) with infinite scrolling
 - 🎵 **Playback** — AVPlayer engine, Standard to Hi-Res quality (lossless with 黑胶 VIP, automatic fallback), shuffle / repeat one / repeat all, play-next queue, gray track detection
+- 🚗 **CarPlay (iOS, opt-in)** — Now Playing, tabbed library, queue, and search templates ship in the binary; activation requires an [Apple CarPlay audio entitlement](https://developer.apple.com/contact/carplay/), which is not granted to most accounts. Build defaults to disabled so the source tree stays open-source-friendly; see [Enabling CarPlay](#enabling-carplay-ios) below
 - 🔓 **Gray track unblocking** — native implementation of UnblockNeteaseMusic's core sources (pyncmd / Kuwo / Kugou); unavailable or trial-only tracks automatically resolve from third-party sources
 - 🖼 **Immersive now-playing page** — artwork-tinted gradient backdrop, large artwork, big synced lyrics (click the player-bar artwork to open, Esc to close)
 - 📻 **Personal FM** — immersive roaming page with trash / skip
@@ -94,6 +95,42 @@ the same mechanism Dopamine uses. This works **only under TrollStore**: a plain
 AltStore/SideStore sideload is signed with a personal certificate and has no way
 to install an IPA on-device, so there it degrades to opening the release page
 for a manual re-sideload.
+
+### Enabling CarPlay (iOS)
+
+CarPlay support is fully implemented in `Sources/Kumone/Core/CarPlay/`, but the
+**default build ships none of it**: no `com.apple.developer.carplay-audio`
+entitlement, no `UISupportsCarPlay`, and no CarPlay scene declaration. Apple
+only grants that entitlement after you submit a CarPlay audio app
+[application](https://developer.apple.com/contact/carplay/), and building with
+it unapproved fails to sign with:
+
+> Entitlement com.apple.developer.carplay-audio not found and could not be
+> included in profile.
+
+So CarPlay is a one-command opt-in instead:
+
+```bash
+make configure-carplay   # enable
+make configure           # back to the default, CarPlay-free build
+```
+
+`make configure-carplay` derives a CarPlay copy of `Config/Info.plist` and
+`Config/KumoneIOS.entitlements` into `ios/Config/Generated/`, then writes
+`ios/Config/CarPlay.local.xcconfig` to point the build at them. All three files
+are untracked, and the Xcode project itself is never modified — so enabling
+CarPlay leaves `git status` clean and produces nothing to review.
+
+Once your developer account has the entitlement approved:
+
+1. Apply for and obtain the **CarPlay (Audio)** capability for your App ID in
+   [Apple Developer → Identifiers](https://developer.apple.com/account/resources/identifiers/list).
+2. Regenerate the provisioning profile so it carries the new capability.
+3. Run `make configure-carplay`.
+4. `Cmd + Shift + K` and rebuild on a device.
+
+To test without a car, use the CarPlay Simulator: Xcode ▸ Open Developer Tool ▸
+Simulator, then I/O ▸ External Displays ▸ CarPlay.
 
 ## Building
 

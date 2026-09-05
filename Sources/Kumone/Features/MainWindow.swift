@@ -26,6 +26,9 @@ struct MainWindow: View {
             // Immersive now-playing page: hide the whole window toolbar
             // (sidebar toggle, navigation title, search field).
             .toolbar(player.showNowPlaying ? .hidden : .automatic, for: .windowToolbar)
+            // Keep the single main window alive on Cmd+W / red button so the Dock
+            // icon can always bring it back (#60/#63/#66/#70).
+            .background(MainWindowConfigurator())
             #endif
             .playerChrome(detailWidth: detailWidth)
             .environment(\.openLogin, { showLogin = true })
@@ -136,6 +139,11 @@ struct MainWindow: View {
             ExploreView()
         case .fm:
             FMView()
+        case .search:
+            // iPad search entry: SearchView's `.searchable` bar surfaces in the
+            // detail nav bar (the desktop toolbar search field doesn't render on
+            // iPad). (#59)
+            SearchView(query: "")
         case .likedSongs:
             if let playlist = account.likedSongsPlaylist {
                 PlaylistDetailView(playlistID: playlist.id, isLikedList: true)
@@ -250,6 +258,66 @@ private struct MainWindowSidebarLayout<Detail: View>: View {
         }
     }
 }
+
+#if os(macOS)
+// MARK: - Main window configurator
+
+/// Grabs the single main `NSWindow` once it exists and installs a close
+/// interceptor: Cmd+W / the red button *hide* the window (`orderOut`) instead
+/// of destroying the single-instance `Window` scene. Destroying the scene left
+/// the app running with no way to reopen it (#60/#66/#70); hiding keeps the
+/// SwiftUI scene fully alive so `AppDelegate.applicationShouldHandleReopen`
+/// can front it again on a Dock click. Every other window-delegate callback is
+/// forwarded untouched to SwiftUI's own delegate.
+struct MainWindowConfigurator: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async { context.coordinator.attach(to: view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { context.coordinator.attach(to: nsView.window) }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSWindowDelegate {
+        private(set) weak var window: NSWindow?
+        private weak var forwardee: NSWindowDelegate?
+
+        func attach(to window: NSWindow?) {
+            guard let window, self.window == nil else { return }
+            self.window = window
+            window.isReleasedWhenClosed = false
+            // Insert ourselves as the delegate, forwarding to whatever
+            // delegate SwiftUI installed.
+            if window.delegate !== self {
+                forwardee = window.delegate
+                window.delegate = self
+            }
+            AppDelegate.shared?.mainWindow = window
+        }
+
+        // Hide instead of close; keep the scene alive.
+        func windowShouldClose(_ sender: NSWindow) -> Bool {
+            sender.orderOut(nil)
+            return false
+        }
+
+        // Transparently forward every other delegate callback to SwiftUI.
+        override func responds(to aSelector: Selector!) -> Bool {
+            super.responds(to: aSelector) || (forwardee?.responds(to: aSelector) ?? false)
+        }
+
+        override func forwardingTarget(for aSelector: Selector!) -> Any? {
+            if forwardee?.responds(to: aSelector) == true { return forwardee }
+            return super.forwardingTarget(for: aSelector)
+        }
+    }
+}
+#endif
 
 // MARK: - Search field
 

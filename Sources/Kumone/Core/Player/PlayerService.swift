@@ -189,7 +189,7 @@ final class PlayerService: ObservableObject {
 
         #if os(iOS)
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, policy: .longFormAudio, options: [])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("Failed to activate audio session: \(error)")
@@ -742,7 +742,7 @@ final class PlayerService: ObservableObject {
         }
     }
 
-    private func resolve(_ context: PlayContext) async throws -> (tracks: [Track], source: PlaySource)? {
+    func resolve(_ context: PlayContext) async throws -> (tracks: [Track], source: PlaySource)? {
         switch context.kind {
         case .fm:
             return nil

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import MediaPlayer
 
@@ -8,12 +9,14 @@ final class NowPlayingManager {
 
     private weak var player: PlayerService?
     private var artworkTask: Task<Void, Never>?
+    private var playbackStateCancellables: Set<AnyCancellable> = []
     private var info: [String: Any] = [:]
 
     private init() {}
 
     func attach(to player: PlayerService) {
         self.player = player
+        playbackStateCancellables.removeAll()
         let center = MPRemoteCommandCenter.shared()
 
         center.playCommand.addTarget { [weak player] _ in
@@ -57,6 +60,60 @@ final class NowPlayingManager {
             }
             return .success
         }
+
+        // Skip forward/backward — backs the ±15s buttons on the CarPlay Now Playing screen.
+        center.skipForwardCommand.preferredIntervals = [15]
+        center.skipForwardCommand.addTarget { [weak player] _ in
+            guard let player else { return .commandFailed }
+            player.seek(to: player.progress + 15)
+            return .success
+        }
+        center.skipBackwardCommand.preferredIntervals = [15]
+        center.skipBackwardCommand.addTarget { [weak player] _ in
+            guard let player else { return .commandFailed }
+            player.seek(to: max(0, player.progress - 15))
+            return .success
+        }
+
+        // Shuffle / Repeat — backs the shuffle and repeat buttons on the CarPlay Now Playing screen.
+        center.changeShuffleModeCommand.addTarget { [weak player] event in
+            guard let player,
+                  let event = event as? MPChangeShuffleModeCommandEvent else { return .commandFailed }
+            let wantOn = event.shuffleType != .off
+            if player.shuffleEnabled != wantOn { player.toggleShuffle() }
+            return .success
+        }
+        center.changeRepeatModeCommand.addTarget { [weak player] event in
+            guard let player,
+                  let event = event as? MPChangeRepeatModeCommandEvent else { return .commandFailed }
+            // MPRepeatType: .off / .one / .all → RepeatMode: .off / .one / .all
+            let target: RepeatMode? = switch event.repeatType {
+                case .off:  .off
+                case .one:  .one
+                case .all:  .all
+                default:    nil
+            }
+            if let target, player.repeatMode != target { player.repeatMode = target }
+            return .success
+        }
+
+        player.$shuffleEnabled
+            .removeDuplicates()
+            .sink { enabled in
+                center.changeShuffleModeCommand.currentShuffleType = enabled ? .items : .off
+            }
+            .store(in: &playbackStateCancellables)
+
+        player.$repeatMode
+            .removeDuplicates()
+            .sink { mode in
+                center.changeRepeatModeCommand.currentRepeatType = switch mode {
+                case .off: .off
+                case .one: .one
+                case .all: .all
+                }
+            }
+            .store(in: &playbackStateCancellables)
     }
 
     /// Reflects the current track's hearted state on the like command.

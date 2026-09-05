@@ -195,6 +195,11 @@ struct NowPlayingView: View {
         // Everything below the artwork needs ~300pt; shrink the artwork on
         // short displays (iPhone landscape) instead of clipping it.
         let artworkSize = max(120, min(340, size.width * 0.32, size.height - 300))
+        // Cap the two-column band and centre it. Spreading each column to
+        // `.infinity` across an ultra-wide display (iPad landscape, ~1368pt)
+        // left the left column's content floating in an oversized half and a
+        // wide blank gutter on the right (#62).
+        let maxBandWidth: CGFloat = hasLyricsColumn ? 1040 : 560
         return HStack(spacing: 0) {
             leftColumn(artworkSize: artworkSize)
                 .frame(maxWidth: .infinity)
@@ -203,6 +208,8 @@ struct NowPlayingView: View {
                     .frame(maxWidth: .infinity)
             }
         }
+        .frame(maxWidth: maxBandWidth)
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, 48)
         .padding(.vertical, size.height < 500 ? 24 : 40)
     }
@@ -370,8 +377,11 @@ struct NowPlayingView: View {
                 height: NowPlayingPresentationMetrics.immersiveHeaderTopInset
             )
 
-            CompactTrackHeader(showsExpandedArtwork: showsExpandedArtwork)
-                .padding(.bottom, 14)
+            CompactTrackHeader(
+                showsExpandedArtwork: showsExpandedArtwork,
+                onTapArtwork: collapseImmersiveArtwork
+            )
+            .padding(.bottom, 14)
 
             ZStack {
                 immersiveArtworkContent(artworkDimension: artworkDimension)
@@ -492,6 +502,17 @@ struct NowPlayingView: View {
         withAnimation(ImmersiveArtworkTransition.animation) {
             showQueueOnMobile = false
             showLyricsOnMobile = true
+        }
+    }
+
+    /// Tapping the top-left cover while lyrics/queue are up returns to the
+    /// expanded artwork — the Apple Music gesture requested in #50. Idempotent,
+    /// so a tap while already expanded is a harmless no-op.
+    private func collapseImmersiveArtwork() {
+        guard showLyricsOnMobile || showQueueOnMobile else { return }
+        withAnimation(ImmersiveArtworkTransition.animation) {
+            showLyricsOnMobile = false
+            showQueueOnMobile = false
         }
     }
 
@@ -963,12 +984,15 @@ private struct IOSImmersiveLyricsColumn: View {
                         LazyVStack(alignment: .leading, spacing: 22) {
                             Color.clear.frame(height: 72)
                             ForEach(lyrics.lines) { line in
-                                lyricLine(line, isActive: line.id == activeIndex)
-                                    .id(line.id)
+                                lyricLine(
+                                    line,
+                                    isActive: line.id == activeIndex
+                                )
+                                .id(line.id)
                             }
                             Color.clear.frame(height: 96)
                         }
-                        .padding(.horizontal, 2)
+                        .padding(.horizontal, 4)
                     }
                     .mask(edgeMask)
                     .accessibilityIdentifier("syncedLyricsScroll")
@@ -989,16 +1013,17 @@ private struct IOSImmersiveLyricsColumn: View {
                     .simultaneousGesture(
                         DragGesture()
                             .onChanged { _ in
-                                guard !isUserScrolling else { return }
-                                resumeTask?.cancel()
                                 isUserScrolling = true
-                            }
-                            .onEnded { _ in
                                 resumeTask?.cancel()
-                                resumeTask = Task {
+                                resumeTask = Task { @MainActor in
                                     try? await Task.sleep(nanoseconds: 3_000_000_000)
                                     guard !Task.isCancelled else { return }
                                     isUserScrolling = false
+                                    if let activeIndex {
+                                        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+                                            proxy.scrollTo(activeIndex, anchor: .center)
+                                        }
+                                    }
                                 }
                             }
                     )
@@ -1035,7 +1060,9 @@ private struct IOSImmersiveLyricsColumn: View {
         activeIndex = index
         guard let index else { return }
         DispatchQueue.main.async {
-            proxy.scrollTo(index, anchor: .center)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                proxy.scrollTo(index, anchor: .center)
+            }
         }
     }
 
@@ -1060,28 +1087,31 @@ private struct IOSImmersiveLyricsColumn: View {
                 if settings.lyricsAnnotation == .romaji, let romaji = line.romaji {
                     Text(romaji)
                         .font(.system(size: isActive ? 15 : 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(isActive ? 0.7 : 0.35))
+                        .foregroundStyle(.white.opacity(isActive ? 0.75 : 0.4))
                 }
 
                 LyricMainText(
-                    line: line, isActive: isActive,
-                    size: 27, weight: isActive ? .bold : .semibold,
+                    line: line,
+                    isActive: isActive,
+                    size: isActive ? 26 : 21,
+                    weight: isActive ? .bold : .semibold,
                     verbatim: settings.verbatimLyrics
                 )
 
                 if settings.showLyricsTranslation, let translation = line.translation {
                     Text(translation)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.white.opacity(isActive ? 0.7 : 0.35))
+                        .font(.system(size: isActive ? 16 : 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(isActive ? 0.75 : 0.4))
                 }
             }
             .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
-            .scaleEffect(isActive ? 1.07 : 0.82, anchor: .leading)
+            .blur(radius: isActive ? 0 : 0.4)
+            .scaleEffect(isActive ? 1.02 : 1.0, anchor: .leading)
         }
         .buttonStyle(.plain)
-        .animation(.spring(response: 0.28, dampingFraction: 0.9), value: isActive)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: isActive)
     }
 }
 
@@ -1125,6 +1155,10 @@ private struct CompactTrackHeader: View {
     @State private var showAddToPlaylist = false
 
     let showsExpandedArtwork: Bool
+    /// Tap handler for the compact cover (used to collapse lyrics back to
+    /// artwork). The real image floats above this placeholder with hit-testing
+    /// disabled, so taps land here.
+    var onTapArtwork: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: ImmersiveArtworkTransition.compactHeaderSpacing) {
@@ -1137,6 +1171,8 @@ private struct CompactTrackHeader: View {
                     key: ImmersiveArtworkFramePreferenceKey.self,
                     value: .bounds
                 ) { [.compact: $0] }
+                .contentShape(Rectangle())
+                .onTapGesture { onTapArtwork?() }
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {

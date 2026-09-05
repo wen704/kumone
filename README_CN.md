@@ -41,6 +41,7 @@ SwiftUI 编写 · 直连网易云真实 API · Sparkle 自动更新
 - 🏠 **推荐** — 每日推荐、私人漫游、心动模式、推荐歌单、雷达歌单（私人雷达系列，按账号个性化）、排行榜、新碟上架、推荐歌手
 - 🧭 **精选** — 分类歌单（精品 / 官方 / 排行榜 / 场景分类）无限滚动
 - 🎵 **播放** — AVPlayer 引擎，标准 ~ Hi-Res 音质可选（黑胶 VIP 可播无损，自动回落），随机 / 单曲循环 / 列表循环，下一首播放队列，灰色歌曲识别
+- 🚗 **CarPlay（iOS，按需开启）** — Now Playing、分类音乐库、播放队列与搜索模板已写入二进制；激活需 [Apple 授权的 CarPlay 音频能力](https://developer.apple.com/contact/carplay/)，大多数账号不会被授予。默认关闭以保证开源源码树可直接编译，详见下方[启用 CarPlay](#启用-carplayios)
 - 🔓 **灰色歌曲解锁** — 原生实现 UnblockNeteaseMusic 核心音源（pyncmd / 酷我 / 酷狗），无版权或试听歌曲自动匹配第三方音源
 - 🖼 **沉浸播放页** — 封面取色渐变背景 + 大封面 + 大字同步歌词（点击播放条封面进入，Esc 退出）
 - 📻 **私人漫游** — 沉浸式 FM 页面，不喜欢 / 切歌
@@ -79,6 +80,31 @@ brew install owo-network/brew/kumone --cask
 #### 应用内自动更新（仅限 TrollStore / 巨魔）
 
 在装有 **[TrollStore](https://github.com/opa334/TrollStore)（巨魔）** 的设备上，Kumone 可自我更新：设置 → 关于 → **检查更新**（启动时也会检查）会带进度圆环下载新 IPA，并通过 `apple-magnifier://install?url=…` 移交给 TrollStore 一键自动安装 —— 与 Dopamine 的机制相同。此功能**仅在 TrollStore 下可用**：普通 AltStore/SideStore 侧载版以个人证书签名，没有在设备上安装 IPA 的权限，因此会降级为打开发布页手动重新侧载。
+
+### 启用 CarPlay（iOS）
+
+CarPlay 的实现代码已完整存在于 `Sources/Kumone/Core/CarPlay/`，但**默认构建完全不包含 CarPlay**：既没有 `com.apple.developer.carplay-audio` entitlement，也没有 `UISupportsCarPlay` 和 CarPlay scene 声明。该 entitlement 需要先向 Apple 提交 CarPlay 音频应用[申请](https://developer.apple.com/contact/carplay/)并获批，未授权就打开会导致签名失败：
+
+> Entitlement com.apple.developer.carplay-audio not found and could not be
+> included in profile.
+
+因此 CarPlay 改为一条命令按需开启：
+
+```bash
+make configure-carplay   # 开启
+make configure           # 切回默认的无 CarPlay 构建
+```
+
+`make configure-carplay` 会基于 `Config/Info.plist` 与 `Config/KumoneIOS.entitlements` 派生出带 CarPlay 的副本放进 `ios/Config/Generated/`，再写一个 `ios/Config/CarPlay.local.xcconfig` 把构建指过去。这三个文件都不纳入 git，且**完全不改动 Xcode 工程文件** —— 开启 CarPlay 后 `git status` 依然干净，不会产生任何需要 review 的 diff。
+
+拿到 Apple 授权后：
+
+1. 在 [Apple Developer → Identifiers](https://developer.apple.com/account/resources/identifiers/list) 为你的 App ID 勾选 **CarPlay (Audio)** 能力。
+2. 重新生成 provisioning profile 以携带新能力。
+3. 执行 `make configure-carplay`。
+4. `Cmd + Shift + K` 清理后在真机重新构建。
+
+没有车也可以测试：Xcode ▸ Open Developer Tool ▸ Simulator，然后 I/O ▸ External Displays ▸ CarPlay。
 
 ## 构建
 

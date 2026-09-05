@@ -24,11 +24,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0646F456C7BF38C0A8ED880E /* KumoneIOSUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KumoneIOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0646F456C7BF38C0A8ED880E /* KumoneIOS.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = KumoneIOS.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2199D32FC69383EC32B19794 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
-		25934AD73710C9EDB53BDDA0 /* KumoneIOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KumoneIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		45602F996F250E88035F23A9 /* KumoneIOSPackage */ = {isa = PBXFileReference; lastKnownFileType = folder; name = KumoneIOSPackage; path = KumoneIOSPackage; sourceTree = SOURCE_ROOT; };
-		66554F47F0D6FC82F2EFDB2A /* KumoneIOS.xctestplan */ = {isa = PBXFileReference; path = KumoneIOS.xctestplan; sourceTree = "<group>"; };
+		25934AD73710C9EDB53BDDA0 /* KumoneIOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = KumoneIOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		45602F996F250E88035F23A9 /* KumoneIOSPackage */ = {isa = PBXFileReference; lastKnownFileType = folder; path = KumoneIOSPackage; sourceTree = SOURCE_ROOT; };
+		66554F47F0D6FC82F2EFDB2A /* KumoneIOS.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = KumoneIOS.xctestplan; sourceTree = "<group>"; };
 		6D28AAA402747474C3A1B8AD /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		74C59F0F113B18EBEA9C55B6 /* Tests.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Tests.xcconfig; sourceTree = "<group>"; };
 		7A9033A23C5610F19ABA3774 /* KumoneIOSUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KumoneIOSUITests.swift; sourceTree = "<group>"; };
@@ -71,7 +71,7 @@
 			isa = PBXGroup;
 			children = (
 				25934AD73710C9EDB53BDDA0 /* KumoneIOS.app */,
-				0646F456C7BF38C0A8ED880E /* KumoneIOSUITests.xctest */,
+				0646F456C7BF38C0A8ED880E /* KumoneIOS.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -142,7 +142,7 @@
 			packageProductDependencies = (
 			);
 			productName = KumoneIOSUITests;
-			productReference = 0646F456C7BF38C0A8ED880E /* KumoneIOSUITests.xctest */;
+			productReference = 0646F456C7BF38C0A8ED880E /* KumoneIOS.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -155,7 +155,6 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					481C5C62EB4A6DB3CC0FDC39 = {
-						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 					7F3FA2EAD87A1580A6CD3880 = {
@@ -314,8 +313,8 @@
 			baseConfigurationReference = 6D28AAA402747474C3A1B8AD /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = Config/KumoneIOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = 9ZGVJ862WJ;
 				ENABLE_PREVIEWS = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -392,8 +391,8 @@
 			baseConfigurationReference = 2199D32FC69383EC32B19794 /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = Config/KumoneIOS.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				DEVELOPMENT_TEAM = M2DXV97G43;
 				ENABLE_PREVIEWS = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
