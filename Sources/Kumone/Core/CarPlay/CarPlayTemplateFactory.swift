@@ -200,7 +200,8 @@ enum CarPlayTemplateFactory {
     /// Compact play-count formatter that returns Chinese-locale units when the count is large enough; smaller values are returned as a plain integer.
     private static func formattedCount(_ count: Int) -> String {
         if count >= 100_000_000 { return "\(count / 100_000_000)亿" }
-        if count >= 10_000 { return "\(Double(count) / 10_000, default: "%.1f")万" }
+        // `default:` 插值参数需要 iOS 17 runtime,改用 String(format:)。
+        if count >= 10_000 { return String(format: "%.1f万", Double(count) / 10_000) }
         return "\(count)"
     }
 }

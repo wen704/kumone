@@ -191,12 +191,13 @@ struct SidebarView: View {
         .background(.ultraThinMaterial)
 #if os(iOS)
         .sheet(isPresented: $showSettings) {
-            NavigationStack {
+            // iOS 15:NavigationStack 不可用,走 SheetNavigationRoot 回退。
+            SheetNavigationRoot {
                 SettingsView()
                     .navigationTitle("设置")
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
+                        ToolbarItem(placement: .primaryAction) {
                             Button("完成") { showSettings = false }
                         }
                     }
