@@ -6,6 +6,23 @@
 section the English bullets come first, followed by their Simplified Chinese
 counterparts. 段落格式：`## <版本号> - <日期>`，条目必须写成单行。
 
+## 0.3.17-0 - 2026-09-05
+
+### Added / 新增
+
+- **iOS + macOS**: synced main 0.3.15–0.3.16 — opt-in CarPlay support mirroring the App's main UI (推荐 / 精选 / 漫游 / 我的) with like / dislike, ±15s skip, shuffle and repeat on the Now Playing screen; the CarPlay Up Next button pushes the live playback queue (current track pinned, up to 300 rows, row-tap jump) plus 随机 / 循环 controls and an album-artist jump outside FM mode; `make configure` / `make configure-carplay` capability selection with CarPlay fully excluded from the default build; the in-app updater now saves the downloaded IPA into the app's Documents folder (findable in the Files app) and opens a share sheet so it can go straight to a signing tool. (#69, #54, #73, #50)
+- **iOS + macOS**：同步 main 0.3.15–0.3.16——可选启用的 CarPlay 支持（严格对齐 App 主界面的 推荐 / 精选 / 漫游 / 我的，Now Playing 支持喜欢 / 不喜欢、±15 秒快进快退、随机与循环）；CarPlay「播放队列」按钮弹出实时播放队列（当前曲目置顶、最多 300 条、点行跳转），非 FM 模式下另有 随机 / 循环 控件与专辑跳转；新增 `make configure` / `make configure-carplay` 构建能力选择，CarPlay 从默认构建中完全移除；应用内更新会把下载的 IPA 保存到 App 的 Documents 目录（可在「文件」App 中找到）并弹出分享面板，可直接导入签名工具。（#69、#54、#73、#50）
+
+### Fixed / 修复
+
+- **iOS 15**: the newly synced code used two APIs unavailable to the iOS 15 build — the CarPlay play-count formatter's string-interpolation `default:` argument, which the Xcode 16.2 toolchain used for iOS 15 builds cannot compile (now `String(format:)`), and the Settings sheet opened from the new iPad sidebar footer, which used `NavigationStack` (iOS 16+) with a `.topBarTrailing` toolbar item (iOS 17+) — it now goes through `SheetNavigationRoot` with `.primaryAction`, so Settings opens correctly on iOS 15.
+- **iOS 15**：同步自 main 的代码中有两处 iOS 15 构建不可用的 API——CarPlay 播放数格式化的字符串插值 `default:` 参数（iOS 15 构建所用的 Xcode 16.2 工具链无法编译，已改为 `String(format:)`），以及 iPad 侧栏底部新增设置入口的弹窗（用了 `NavigationStack`（iOS 16+）与 `.topBarTrailing` 工具栏按钮（iOS 17+））——现改走 `SheetNavigationRoot` 与 `.primaryAction`，iOS 15 上可正常打开设置。
+
+### Improved / 改进
+
+- The fixes and improvements synced from main (iPad sidebar Settings / Search entries, capped-and-centred landscape now-playing columns, the iPhone 15 Pro Max letterboxed-launch fix, two-line cover-card alignment, macOS close-hides-window behaviour, tap-cover-to-collapse in the immersive now-playing page, unified detail-page skeletons / responsive FM layout / smoother immersive lyrics / accurate player-bar clearance) are all adapted and included in this iOS 15 release. (#67, #59, #62, #71, #68, #60, #63, #66, #70, #65, #50)
+- 同步自 main 的修复与改进（iPad 侧栏设置 / 搜索入口、横屏播放页内容限宽居中、iPhone 15 Pro Max 信箱模式启动修复、双行标题封面卡片对齐、macOS 关窗改为隐藏、沉浸播放页点击小封面收起歌词、统一的详情页骨架 / FM 自适应布局 / 更顺滑的沉浸歌词 / 更准确的播放条留白）均已适配 iOS 15 并包含在本版中。（#67、#59、#62、#71、#68、#60、#63、#66、#70、#65、#50）
+
 ## 0.3.16 - 2026-09-03
 
 ### Added / 新增
