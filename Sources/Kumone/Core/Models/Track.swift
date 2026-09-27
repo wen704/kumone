@@ -153,3 +153,14 @@ extension Track {
         return .playable
     }
 }
+
+extension Array where Element == Track {
+    @discardableResult
+    mutating func replaceRecommendation(_ rejected: Track, with replacement: Track) -> Bool {
+        guard let index = firstIndex(where: { $0.id == rejected.id }),
+              replacement.id != rejected.id,
+              !contains(where: { $0.id == replacement.id }) else { return false }
+        self[index] = replacement
+        return true
+    }
+}

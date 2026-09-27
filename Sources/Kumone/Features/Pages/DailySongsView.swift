@@ -28,7 +28,15 @@ struct DailySongsView: View {
                                    subtitle: "多听几首歌培养口味，每天 6:00 更新")
                         .frame(minHeight: 300)
                 } else {
-                    TrackListView(tracks: tracks, source: .daily, context: .daily)
+                    TrackListView(
+                        tracks: tracks,
+                        source: .daily,
+                        context: .daily,
+                        recommendationContext: .daily,
+                        onRecommendationReduced: { rejected, replacement in
+                            tracks.replaceRecommendation(rejected, with: replacement)
+                        }
+                    )
                         .padding(.horizontal, Theme.Layout.contentInset - 10)
                 }
                 PlayerClearanceSpacer()

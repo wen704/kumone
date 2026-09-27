@@ -7,6 +7,7 @@ actor ImageCache {
     static let shared = ImageCache()
 
     private nonisolated(unsafe) let memory = NSCache<NSString, PlatformImage>()
+    private let fileManager = FileManager.default
     private let diskURL: URL
     private var inflight: [String: Task<PlatformImage?, Never>] = [:]
 
@@ -15,7 +16,6 @@ actor ImageCache {
         memory.totalCostLimit = 64 * 1024 * 1024
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         diskURL = caches.appendingPathComponent("im.missuo.Kumone/images", isDirectory: true)
-        try? FileManager.default.createDirectory(at: diskURL, withIntermediateDirectories: true)
     }
 
     func image(for url: URL) async -> PlatformImage? {
@@ -26,16 +26,35 @@ actor ImageCache {
         if let existing = inflight[key] {
             return await existing.value
         }
-        let task = Task<PlatformImage?, Never> { [diskURL] in
+        let task = Task<PlatformImage?, Never> { [diskURL, fileManager] in
             let fileURL = diskURL.appendingPathComponent(key)
-            if let data = try? Data(contentsOf: fileURL), let image = PlatformImage(data: data) {
-                return image
+            do {
+                try fileManager.createDirectory(at: diskURL, withIntermediateDirectories: true)
+                if fileManager.fileExists(atPath: fileURL.path) {
+                    let data = try Data(contentsOf: fileURL)
+                    if let image = PlatformImage(data: data) {
+                        return image
+                    }
+                    try fileManager.removeItem(at: fileURL)
+                }
+            } catch {
+                print("Image cache disk lookup failed: \(error)")
             }
-            guard let (data, response) = try? await URLSession.shared.data(from: url),
-                  (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
-                  let image = PlatformImage(data: data) else { return nil }
-            try? data.write(to: fileURL, options: .atomic)
-            return image
+
+            do {
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
+                      let image = PlatformImage(data: data) else { return nil }
+                do {
+                    try data.write(to: fileURL, options: .atomic)
+                } catch {
+                    print("Image cache disk write failed: \(error)")
+                }
+                return image
+            } catch {
+                print("Image download failed: \(error)")
+                return nil
+            }
         }
         inflight[key] = task
         let result = await task.value
@@ -54,6 +73,35 @@ actor ImageCache {
     /// `image(for:)` for disk/network loads.
     nonisolated func cachedImage(for url: URL) -> PlatformImage? {
         memory.object(forKey: Self.cacheKey(for: url) as NSString)
+    }
+
+    func usage() throws -> CacheUsage {
+        try fileManager.createDirectory(at: diskURL, withIntermediateDirectories: true)
+        let files = try fileManager.contentsOfDirectory(
+            at: diskURL,
+            includingPropertiesForKeys: [.fileAllocatedSizeKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )
+        let bytes = try files.reduce(into: Int64(0)) { total, fileURL in
+            let values = try fileURL.resourceValues(forKeys: [.fileAllocatedSizeKey, .fileSizeKey])
+            total += Int64(values.fileAllocatedSize ?? values.fileSize ?? 0)
+        }
+        return CacheUsage(bytes: bytes)
+    }
+
+    func clear() throws {
+        try fileManager.createDirectory(at: diskURL, withIntermediateDirectories: true)
+        let files = try fileManager.contentsOfDirectory(
+            at: diskURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        for fileURL in files {
+            try fileManager.removeItem(at: fileURL)
+        }
+        inflight.values.forEach { $0.cancel() }
+        inflight.removeAll()
+        memory.removeAllObjects()
     }
 
     private static func cacheKey(for url: URL) -> String {

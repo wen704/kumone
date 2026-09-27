@@ -248,6 +248,36 @@ enum NeteaseAPI {
         return resp.data?.dailySongs ?? []
     }
 
+    struct RecommendDislikeResponse: Decodable {
+        let data: Track
+
+        private enum CodingKeys: String, CodingKey {
+            case data
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            let track = try container.decode(Track.self, forKey: .data)
+            guard track.id > 0,
+                  !track.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .data,
+                    in: container,
+                    debugDescription: "Recommendation replacement is incomplete"
+                )
+            }
+            data = track
+        }
+    }
+
+    static func dislikeRecommendedSong(id: Int) async throws -> Track {
+        try await weapi(
+            RecommendDislikeResponse.self,
+            "/v2/discovery/recommend/dislike",
+            ["resId": id, "resType": 4, "sceneType": 1]
+        ).data
+    }
+
     struct PlaylistDetailResponse: Decodable {
         let playlist: PlaylistDetail
         let privileges: [TrackPrivilege]?

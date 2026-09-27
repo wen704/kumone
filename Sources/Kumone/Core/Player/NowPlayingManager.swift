@@ -61,19 +61,12 @@ final class NowPlayingManager {
             return .success
         }
 
-        // Skip forward/backward — backs the ±15s buttons on the CarPlay Now Playing screen.
-        center.skipForwardCommand.preferredIntervals = [15]
-        center.skipForwardCommand.addTarget { [weak player] _ in
-            guard let player else { return .commandFailed }
-            player.seek(to: player.progress + 15)
-            return .success
-        }
-        center.skipBackwardCommand.preferredIntervals = [15]
-        center.skipBackwardCommand.addTarget { [weak player] _ in
-            guard let player else { return .commandFailed }
-            player.seek(to: max(0, player.progress - 15))
-            return .success
-        }
+        // NB: we deliberately do NOT register skipForward/skipBackward (±15s).
+        // Enabling those commands makes iOS show "back 15s / forward 15s" on the
+        // lock screen and Dynamic Island *instead of* previous/next track — a
+        // podcast-style layout that's wrong for a music player and hid the
+        // skip-track buttons (#83, #87). Previous/next above stay the system
+        // media buttons everywhere, including CarPlay.
 
         // Shuffle / Repeat — backs the shuffle and repeat buttons on the CarPlay Now Playing screen.
         center.changeShuffleModeCommand.addTarget { [weak player] event in
@@ -97,12 +90,24 @@ final class NowPlayingManager {
             return .success
         }
 
+        #if os(macOS)
+        // Shuffle is one of the queue orders on macOS (`shuffleEnabled` is
+        // derived), so observe the order and map it back to on/off.
+        player.$queueOrder
+            .map { $0 == .shuffled }
+            .removeDuplicates()
+            .sink { enabled in
+                center.changeShuffleModeCommand.currentShuffleType = enabled ? .items : .off
+            }
+            .store(in: &playbackStateCancellables)
+        #else
         player.$shuffleEnabled
             .removeDuplicates()
             .sink { enabled in
                 center.changeShuffleModeCommand.currentShuffleType = enabled ? .items : .off
             }
             .store(in: &playbackStateCancellables)
+        #endif
 
         player.$repeatMode
             .removeDuplicates()

@@ -4,10 +4,19 @@ private struct OpenLoginKey: EnvironmentKey {
     static let defaultValue: () -> Void = {}
 }
 
+private struct OpenDestinationKey: EnvironmentKey {
+    static let defaultValue: (Destination) -> Void = { _ in }
+}
+
 extension EnvironmentValues {
     var openLogin: () -> Void {
         get { self[OpenLoginKey.self] }
         set { self[OpenLoginKey.self] = newValue }
+    }
+
+    var openDestination: (Destination) -> Void {
+        get { self[OpenDestinationKey.self] }
+        set { self[OpenDestinationKey.self] = newValue }
     }
 }
 
@@ -61,6 +70,7 @@ enum SidebarItem: Hashable {
 
 enum Destination: Hashable {
     case playlist(Int)
+    case radarPlaylist(Int)
     case album(Int)
     case artist(Int)
     case daily
@@ -69,6 +79,13 @@ enum Destination: Hashable {
     case collections
     case cloud
     case search(String)
+}
+
+extension Array where Element == Destination {
+    mutating func appendIfNotCurrent(_ destination: Destination) {
+        guard last != destination else { return }
+        append(destination)
+    }
 }
 
 /// Renders the page for a `Destination`. Shared by the iOS 16+
@@ -82,6 +99,8 @@ struct DestinationContent: View {
             switch destination {
             case .playlist(let id):
                 PlaylistDetailView(playlistID: id)
+            case .radarPlaylist(let id):
+                PlaylistDetailView(playlistID: id, recommendationContext: .radar)
             case .album(let id):
                 AlbumDetailView(albumID: id)
             case .artist(let id):

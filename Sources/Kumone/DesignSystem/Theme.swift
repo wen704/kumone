@@ -31,7 +31,7 @@ enum Theme {
         static let playerBarHeight: CGFloat = 56
         /// Gap between the floating player bar and the window's bottom edge.
         /// Must match the bar's own `.padding(.bottom,)` in PlayerBar.
-        static let playerBarBottomMargin: CGFloat = 10
+        static let playerBarBottomMargin: CGFloat = 16
         /// Bottom inset pages need so scrolled content clears the floating bar.
         static var playerChromeClearance: CGFloat { playerBarHeight + playerBarBottomMargin }
         /// Extra breathing margin for scrollable content clearing chrome.

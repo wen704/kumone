@@ -66,14 +66,11 @@ final class SearchViewModel: ObservableObject {
 }
 
 struct SearchView: View {
-    let initialQuery: String
-
     @StateObject private var model: SearchViewModel
     @State private var searchText: String = ""
     @EnvironmentObject private var player: PlayerService
 
     init(query: String) {
-        self.initialQuery = query
         _model = StateObject(wrappedValue: SearchViewModel(query: query))
         _searchText = State(initialValue: query)
     }
@@ -104,6 +101,10 @@ struct SearchView: View {
                 PlayerClearanceSpacer()
             }
         }
+        #if os(iOS)
+        // iPad enters SearchView from the sidebar, where the desktop window
+        // toolbar search field is unavailable. On macOS, MainWindow owns the
+        // only search field and navigates here with its submitted query.
         .searchable(text: $searchText, prompt: "搜索歌曲、歌手、专辑、歌单")
         .onSubmit(of: .search) {
             model.setQuery(searchText)
@@ -118,6 +119,7 @@ struct SearchView: View {
                 }
             }
         }
+        #endif
         .navigationTitle(searchText.isEmpty ? "搜索" : String(localized: "搜索：\(searchText)"))
         .task(id: model.tab) {
             await model.load(tab: model.tab)

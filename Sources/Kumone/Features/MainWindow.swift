@@ -1,16 +1,23 @@
 import SwiftUI
 
 struct MainWindow: View {
+    private let externalPath: Binding<[Destination]>?
 #if os(macOS)
     @Environment(\.openWindow) private var openWindow
 #endif
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var player: PlayerService
     @EnvironmentObject private var account: AccountStore
     @EnvironmentObject private var settings: SettingsManager
     @EnvironmentObject private var toasts: ToastCenter
 
+    #if os(macOS)
+    @StateObject private var artworkStore = NowPlayingArtworkStore()
+    #else
+    @EnvironmentObject private var artworkStore: NowPlayingArtworkStore
+    #endif
     @State private var selection: SidebarItem = .home
-    @State private var path: [Destination] = []
+    @State private var localPath: [Destination] = []
     @State private var showLogin = false
     @State private var detailWidth: CGFloat = 0
     /// iOS 15:NavigationView 没有可编程路径,切换侧栏选择时递增以重建
@@ -19,25 +26,68 @@ struct MainWindow: View {
     /// iOS 15:程序化搜索跳转的查询词,激活隐藏的 NavigationLink
     /// (16+ 直接 append 到 path)。
     @State private var pushedSearchQuery: String?
+    #if os(macOS)
+    @State private var mainColumnLeadingInset: CGFloat = 0
+    @State private var nowPlayingChromeHidden = false
+    @State private var nowPlayingChromeFadedOut = false
+    @State private var nowPlayingChromeTask: Task<Void, Never>?
+    #endif
+
+    init(path: Binding<[Destination]>? = nil) {
+        externalPath = path
+    }
+
+    private var path: [Destination] {
+        get { externalPath?.wrappedValue ?? localPath }
+        nonmutating set {
+            if let externalPath {
+                externalPath.wrappedValue = newValue
+            } else {
+                localPath = newValue
+            }
+        }
+    }
+
+    private var pathBinding: Binding<[Destination]> {
+        externalPath ?? $localPath
+    }
 
     var body: some View {
         navigationContainer
             #if os(macOS)
             // Immersive now-playing page: hide the whole window toolbar
             // (sidebar toggle, navigation title, search field).
-            .toolbar(player.showNowPlaying ? .hidden : .automatic, for: .windowToolbar)
+            .toolbar(nowPlayingChromeHidden ? .hidden : .automatic, for: .windowToolbar)
             // Keep the single main window alive on Cmd+W / red button so the Dock
             // icon can always bring it back (#60/#63/#66/#70).
-            .background(MainWindowConfigurator())
+            .background(
+                MainWindowConfigurator(
+                    ambientConfiguration: MainWindowAmbientConfiguration(
+                        showsAmbientBackground: settings.showMainWindowAmbientBackground,
+                        showsTitlebarAmbientBackground: !nowPlayingChromeHidden,
+                        showsNowPlaying: player.showNowPlaying,
+                        colors: artworkStore.colors,
+                        mainColumnLeadingInset: mainColumnLeadingInset,
+                        intensity: settings.mainWindowAmbientBackgroundIntensity,
+                        isDark: isDarkAppearance
+                    ),
+                    titlebarFadedOut: nowPlayingChromeFadedOut
+                )
+            )
             #endif
             .playerChrome(detailWidth: detailWidth)
             .environment(\.openLogin, { showLogin = true })
+            .environment(\.openDestination, openDestination)
+            #if os(macOS)
+            .environmentObject(artworkStore)
+            #endif
             .task {
 #if os(macOS)
             // Keep this action in the app delegate: when the user closes the
             // last WindowGroup window, there is no view left to receive a
             // Dock reopen event directly.
             AppDelegate.shared?.openMainWindow = { openWindow(id: "main") }
+            artworkStore.setArtworkNeeded(needsCurrentArtwork)
 #endif
             DesktopLyricsController.shared.sync(with: settings.showDesktopLyrics)
             await account.bootstrap()
@@ -45,13 +95,55 @@ struct MainWindow: View {
             .onChange(of: settings.showDesktopLyrics) { _ in
                 DesktopLyricsController.shared.sync(with: settings.showDesktopLyrics)
             }
+            #if os(macOS)
+            .onChange(of: settings.showMainWindowAmbientBackground) { _ in
+                artworkStore.setArtworkNeeded(needsCurrentArtwork)
+            }
+            // Warm the cover as soon as a track loads: the now-playing page only
+            // slides in smoothly when the artwork is already in memory.
+            .onChange(of: player.hasCurrentTrack) { _ in
+                artworkStore.setArtworkNeeded(needsCurrentArtwork)
+            }
+            #endif
+            .onChange(of: player.showNowPlaying) { _ in
+                #if os(macOS)
+                artworkStore.setArtworkNeeded(needsCurrentArtwork)
+                nowPlayingChromeTask?.cancel()
+                if player.showNowPlaying {
+                    // Fade the titlebar out as the page rises to cover it, then
+                    // drop the toolbar once nothing is left to see — snapping it
+                    // away at once reads as a glitch above the rising page.
+                    nowPlayingChromeTask = Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(120))
+                        guard !Task.isCancelled else { return }
+                        nowPlayingChromeFadedOut = true
+                        try? await Task.sleep(for: .milliseconds(230))
+                        guard !Task.isCancelled else { return }
+                        nowPlayingChromeHidden = true
+                    }
+                } else {
+                    nowPlayingChromeHidden = false
+                    nowPlayingChromeFadedOut = false
+                }
+                #endif
+            }
             .sheet(isPresented: $showLogin) {
                 LoginSheet()
             }
             .overlay {
                 if player.showNowPlaying {
-                    NowPlayingView()
+                    #if os(macOS)
+                    NowPlayingView(onOpenDestination: openDestination)
+                        .environmentObject(artworkStore)
+                        .background(ArrowCursorOverride())
+                        // Resolve the slide at the page boundary, including artwork
+                        // inserted asynchronously while the transition is running.
+                        .geometryGroup()
                         .transition(.move(edge: .bottom).combined(with: .opacity))
+                    #else
+                    NowPlayingView(onOpenDestination: openDestination)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    #endif
                 }
             }
             .overlay(alignment: .top) {
@@ -74,6 +166,15 @@ struct MainWindow: View {
             submitSearch: submitSearch
         ) {
             detailStack
+                .onGeometryChange(for: CGRect.self) { proxy in
+                    proxy.frame(in: .named("mainWindow"))
+                } action: { frame in
+                    detailWidth = frame.width
+                    mainColumnLeadingInset = frame.minX
+                }
+        }
+        .overlay(alignment: .trailing) {
+            ambientBackground
         }
         #else
         if #available(iOS 16.0, *) {
@@ -83,6 +184,9 @@ struct MainWindow: View {
                 submitSearch: submitSearch
             ) {
                 detailStack
+            }
+            .overlay(alignment: .trailing) {
+                ambientBackground
             }
         } else {
             MainWindowSidebarLayout(
@@ -96,8 +200,19 @@ struct MainWindow: View {
         #endif
     }
 
+    @ViewBuilder
+    private var ambientBackground: some View {
+        if settings.showMainWindowAmbientBackground, detailWidth > 0 {
+            MainWindowAmbientBackground(
+                colors: artworkStore.colors,
+                intensity: settings.mainWindowAmbientBackgroundIntensity
+            )
+            .frame(width: detailWidth)
+        }
+    }
+
     private var detailStack: some View {
-        AppNavigationStack(path: $path, generation: detailGeneration) {
+        AppNavigationStack(path: pathBinding, generation: detailGeneration) {
             rootView
                 .playerContentInset()
                 .background(
@@ -112,9 +227,11 @@ struct MainWindow: View {
                 )
                 .appDestinations()
         }
+        #if os(iOS)
         .compatWidthTracking { width in
             detailWidth = width
         }
+        #endif
         .onChange(of: selection) { _ in
             path = []
             pushedSearchQuery = nil
@@ -128,6 +245,24 @@ struct MainWindow: View {
         } else {
             pushedSearchQuery = query
         }
+    }
+
+    private func openDestination(_ destination: Destination) {
+        #if os(macOS)
+        guard player.showNowPlaying else {
+            path.appendIfNotCurrent(destination)
+            return
+        }
+
+        withAnimation(AppAnimation.smooth, completionCriteria: .removed) {
+            player.showNowPlaying = false
+        } completion: {
+            path.appendIfNotCurrent(destination)
+        }
+        #else
+        player.showNowPlaying = false
+        path.appendIfNotCurrent(destination)
+        #endif
     }
 
     @ViewBuilder
@@ -179,12 +314,20 @@ struct MainWindow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    #if os(macOS)
+    private var needsCurrentArtwork: Bool {
+        settings.showMainWindowAmbientBackground || player.hasCurrentTrack
+    }
+
+    private var isDarkAppearance: Bool {
+        (settings.appearance.colorScheme ?? colorScheme) == .dark
+    }
+    #endif
 }
 
 // MARK: - Split / sidebar containers
 
-/// iOS 16+/macOS 分栏容器;沉浸式播放页打开时收起侧栏(修复分割线
-/// 拖拽光标在覆盖层下仍可触发的问题,#6)。
+/// iOS 16+/macOS 分栏容器。
 @available(iOS 16.0, macOS 13.0, *)
 private struct MainWindowSplitContainer<Detail: View>: View {
     @Binding var selection: SidebarItem
@@ -192,18 +335,17 @@ private struct MainWindowSplitContainer<Detail: View>: View {
     let submitSearch: (String) -> Void
     @ViewBuilder var detail: () -> Detail
 
-    @EnvironmentObject private var player: PlayerService
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var visibilityBeforeNowPlaying: NavigationSplitViewVisibility?
-
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView {
             SidebarView(selection: $selection, showLogin: $showLogin)
                 .navigationSplitViewColumnWidth(min: 200, ideal: Theme.Layout.sidebarWidth, max: 280)
         } detail: {
             detail()
         }
         .navigationSplitViewStyle(.balanced)
+        #if os(macOS)
+        .coordinateSpace(name: "mainWindow")
+        #endif
         .toolbar {
             // `sharedBackgroundVisibility` 是 iOS/macOS 26 SDK 符号,
             // 旧工具链(Xcode 16.2)编译时退回普通 ToolbarItem。
@@ -223,15 +365,6 @@ private struct MainWindowSplitContainer<Detail: View>: View {
                 SearchFieldView { submitSearch($0) }
             }
             #endif
-        }
-        .onChange(of: player.showNowPlaying) { _ in
-            if player.showNowPlaying {
-                visibilityBeforeNowPlaying = columnVisibility
-                columnVisibility = .detailOnly
-            } else {
-                columnVisibility = visibilityBeforeNowPlaying ?? .all
-                visibilityBeforeNowPlaying = nil
-            }
         }
     }
 }
@@ -260,6 +393,23 @@ private struct MainWindowSidebarLayout<Detail: View>: View {
 }
 
 #if os(macOS)
+// MARK: - Cursor override
+
+/// Claims the arrow cursor over the whole now-playing page. AppKit cursor
+/// rects ignore hit-testing, so without this the split-view divider's resize
+/// cursor leaks through the full-window overlay wherever the divider sits (#6).
+struct ArrowCursorOverride: NSViewRepresentable {
+    func makeNSView(context: Context) -> CursorOverrideView { CursorOverrideView() }
+
+    func updateNSView(_ nsView: CursorOverrideView, context: Context) {}
+
+    final class CursorOverrideView: NSView {
+        override func resetCursorRects() {
+            addCursorRect(bounds, cursor: .arrow)
+        }
+    }
+}
+
 // MARK: - Main window configurator
 
 /// Grabs the single main `NSWindow` once it exists and installs a close
@@ -270,22 +420,62 @@ private struct MainWindowSidebarLayout<Detail: View>: View {
 /// can front it again on a Dock click. Every other window-delegate callback is
 /// forwarded untouched to SwiftUI's own delegate.
 struct MainWindowConfigurator: NSViewRepresentable {
+    let ambientConfiguration: MainWindowAmbientConfiguration
+    let titlebarFadedOut: Bool
+
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
-        DispatchQueue.main.async { context.coordinator.attach(to: view.window) }
+        DispatchQueue.main.async {
+            context.coordinator.requestAmbientBackgroundConfiguration(
+                from: view,
+                ambientConfiguration: ambientConfiguration
+            )
+            context.coordinator.setTitlebarFadedOut(titlebarFadedOut)
+        }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async { context.coordinator.attach(to: nsView.window) }
+        DispatchQueue.main.async {
+            context.coordinator.requestAmbientBackgroundConfiguration(
+                from: nsView,
+                ambientConfiguration: ambientConfiguration
+            )
+            context.coordinator.setTitlebarFadedOut(titlebarFadedOut)
+        }
     }
 
     @MainActor
     final class Coordinator: NSObject, NSWindowDelegate {
         private(set) weak var window: NSWindow?
         private weak var forwardee: NSWindowDelegate?
+        private let ambientAppearance = MainWindowAmbientAppearanceController()
+        private weak var configurationHost: NSView?
+        private var pendingAmbientConfiguration: MainWindowAmbientConfiguration?
+        private var hasScheduledAmbientConfiguration = false
+        private var titlebarFadedOut = false
+
+        /// Fades the titlebar chrome (traffic lights, title, toolbar) instead
+        /// of letting `.toolbar(.hidden)` snap it away. The superview of the
+        /// standard window buttons is the titlebar container, so one alpha
+        /// animation covers the whole bar.
+        func setTitlebarFadedOut(_ fadedOut: Bool) {
+            guard fadedOut != titlebarFadedOut else { return }
+            titlebarFadedOut = fadedOut
+            guard let titlebar = window?
+                .standardWindowButton(.closeButton)?.superview
+            else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = fadedOut ? 0.2 : 0.25
+                context.timingFunction = CAMediaTimingFunction(
+                    name: fadedOut ? .easeIn : .easeOut
+                )
+                titlebar.animator().alphaValue = fadedOut ? 0 : 1
+            }
+            ambientAppearance.setTitlebarMaskFadedOut(fadedOut)
+        }
 
         func attach(to window: NSWindow?) {
             guard let window, self.window == nil else { return }
@@ -298,6 +488,40 @@ struct MainWindowConfigurator: NSViewRepresentable {
                 window.delegate = self
             }
             AppDelegate.shared?.mainWindow = window
+        }
+
+        func requestAmbientBackgroundConfiguration(
+            from host: NSView,
+            ambientConfiguration: MainWindowAmbientConfiguration
+        ) {
+            configurationHost = host
+            pendingAmbientConfiguration = ambientConfiguration
+            guard !hasScheduledAmbientConfiguration else { return }
+            hasScheduledAmbientConfiguration = true
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.hasScheduledAmbientConfiguration = false
+                guard let configuration = self.pendingAmbientConfiguration else { return }
+                self.pendingAmbientConfiguration = nil
+                self.attach(to: self.configurationHost?.window)
+                guard let window = self.window else { return }
+                self.ambientAppearance.configure(configuration, in: window)
+            }
+        }
+
+        func windowDidUpdate(_ notification: Notification) {
+            forwardee?.windowDidUpdate?(notification)
+            if let window {
+                ambientAppearance.updateLayout(in: window)
+            }
+        }
+
+        func windowDidResize(_ notification: Notification) {
+            forwardee?.windowDidResize?(notification)
+            if let window {
+                ambientAppearance.updateLayout(in: window)
+            }
         }
 
         // Hide instead of close; keep the scene alive.
@@ -350,6 +574,10 @@ struct SearchFieldView: View {
         .padding(.vertical, 5)
         .background(.primary.opacity(0.05), in: Capsule())
         .overlay(Capsule().strokeBorder(.primary.opacity(focused ? 0.18 : 0.08), lineWidth: 1))
+        #if os(macOS)
+        // Keep the capsule off the window's rounded top-right corner (#88).
+        .padding(.trailing, 8)
+        #endif
         .animation(AppAnimation.quick, value: focused)
         .task {
             if let keyword = try? await NeteaseAPI.searchDefaultKeyword(), !keyword.isEmpty {

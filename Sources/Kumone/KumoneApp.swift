@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 #if os(macOS)
@@ -8,6 +9,7 @@ public struct KumoneApp: App {
     @StateObject private var account = AccountStore.shared
     @StateObject private var settings = SettingsManager.shared
     @StateObject private var toasts = ToastCenter.shared
+    @Environment(\.openWindow) private var openWindow
 
     public init() {}
 
@@ -46,10 +48,17 @@ public struct KumoneApp: App {
 
                 Divider()
 
-                Button("随机播放") { player.toggleShuffle() }
+                // One shortcut for the whole queue-order cycle, like the button
+                // it mirrors: ⇧⌘S walks 列表 → 随机 → AutoMix → 列表, and the
+                // third stop is simply absent where it could do nothing.
+                Button("播放顺序") { player.cycleQueueOrder() }
                     .keyboardShortcut("s", modifiers: [.command, .shift])
                 Button("循环模式") { player.cycleRepeatMode() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
+
+                Divider()
+
+                SleepTimerMenu(player: player)
 
                 Divider()
 
@@ -71,7 +80,30 @@ public struct KumoneApp: App {
                 }
                 .keyboardShortcut("u", modifiers: .command)
             }
+
+            #if DEBUG
+            // Developer tooling, DEBUG builds only (`Scripts/build-app.sh`
+            // defaults to debug, so the listening machine still gets it).
+            // Inert until opened — see `AutoMixDebugModel`.
+            CommandMenu(AutoMixDebugPanel.menuTitle) {
+                Button {
+                    openWindow(id: AutoMixDebugPanel.windowID)
+                } label: {
+                    Text(verbatim: "AutoMix Debug")
+                }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+            }
+            #endif
         }
+
+        #if DEBUG
+        Window(AutoMixDebugPanel.windowTitle, id: AutoMixDebugPanel.windowID) {
+            AutoMixDebugPanel()
+                .preferredColorScheme(settings.appearance.colorScheme)
+        }
+        .defaultSize(width: 460, height: 620)
+        .windowResizability(.contentMinSize)
+        #endif
 
         Settings {
             SettingsView()
@@ -87,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static weak var shared: AppDelegate?
 
     private var keyMonitor: Any?
+    private var appearanceObserver: AnyCancellable?
     /// Installed by the SwiftUI main scene. Calling it recreates the scene
     /// when its NSWindow was released after the user closed the last window.
     var openMainWindow: (() -> Void)?
@@ -97,6 +130,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
+        // Drive NSApp.appearance from the setting so the NATIVE window chrome
+        // (both main and Settings window titlebars/forms) tracks it. SwiftUI's
+        // `.preferredColorScheme` alone doesn't reliably revert the native
+        // titlebar when switching a fixed theme back to "follow system" (#94).
+        applyAppearance(SettingsManager.shared.appearance.colorScheme)
+        appearanceObserver = SettingsManager.shared.$appearance
+            .map(\.colorScheme)
+            .removeDuplicates()
+            .sink { [weak self] scheme in self?.applyAppearance(scheme) }
         // Space toggles play/pause unless a text field is being edited.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             let noModifiers = event.modifierFlags
@@ -119,6 +161,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return nil
             }
             return event
+        }
+    }
+
+    private func applyAppearance(_ scheme: ColorScheme?) {
+        switch scheme {
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        default: NSApp.appearance = nil // follow system
         }
     }
 

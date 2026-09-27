@@ -7,6 +7,7 @@ public struct IOSMainWindow: View {
     @StateObject private var settings = SettingsManager.shared
     @StateObject private var toasts = ToastCenter.shared
     @StateObject private var updater = IOSUpdater.shared
+    @StateObject private var artworkStore = NowPlayingArtworkStore()
     @Namespace private var nowPlayingTransition
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -26,6 +27,7 @@ public struct IOSMainWindow: View {
     /// iOS 15:NavigationView 没有可编程路径,重按 Tab 通过递增 generation
     /// 重建该 Tab 的视图树来实现回到根页面(16+ 分支忽略)。
     @State private var tabGenerations: [IOSTab: Int] = [:]
+    @State private var iPadPath: [Destination] = []
 
     public init() {}
 
@@ -35,14 +37,19 @@ public struct IOSMainWindow: View {
             .environmentObject(account)
             .environmentObject(settings)
             .environmentObject(toasts)
+            .environmentObject(artworkStore)
             .tint(Theme.accent)
             .preferredColorScheme(settings.appearance.colorScheme)
             .environment(\.openLogin, { showLogin = true })
+            .environment(\.openDestination, openDestination)
             .task {
                 await account.bootstrap()
                 if settings.autoCheckUpdates {
                     IOSUpdater.shared.check(interactive: false)
                 }
+            }
+            .task(id: settings.showMainWindowAmbientBackground) {
+                artworkStore.setArtworkNeeded(settings.showMainWindowAmbientBackground)
             }
             .sheet(isPresented: $updater.showSheet) {
                 IOSUpdaterSheet()
@@ -138,9 +145,18 @@ public struct IOSMainWindow: View {
     @ViewBuilder
     private var appContent: some View {
         if UIDevice.current.userInterfaceIdiom == .pad {
-            MainWindow()
+            MainWindow(path: $iPadPath)
         } else {
             tabInterface
+                .overlay {
+                    if settings.showMainWindowAmbientBackground {
+                        MainWindowAmbientBackground(
+                            colors: artworkStore.colors,
+                            intensity: settings.mainWindowAmbientBackgroundIntensity
+                        )
+                        .ignoresSafeArea()
+                    }
+                }
         }
     }
 
@@ -154,7 +170,7 @@ public struct IOSMainWindow: View {
             usesSystemInteractiveDismissal: usesSystemInteractiveDismissal,
             dismissAnimation: dismissAnimation
         ) {
-            NowPlayingView()
+            NowPlayingView(onOpenDestination: openDestination)
                 .environmentObject(player)
                 .environmentObject(account)
                 .environmentObject(settings)
@@ -264,6 +280,19 @@ public struct IOSMainWindow: View {
         case .library: libraryPath = []
         }
         tabGenerations[tab, default: 0] += 1
+    }
+
+    private func openDestination(_ destination: Destination) {
+        player.showNowPlaying = false
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            iPadPath.appendIfNotCurrent(destination)
+            return
+        }
+
+        let path = binding(for: selectedTab)
+        var destinations = path.wrappedValue
+        destinations.appendIfNotCurrent(destination)
+        path.wrappedValue = destinations
     }
 
     @ViewBuilder
