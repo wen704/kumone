@@ -44,7 +44,8 @@ final class SleepTimer: ObservableObject {
         state = .countdown(deadline: Date.now.addingTimeInterval(seconds))
         deadlineTask = Task { [weak self] in
             do {
-                try await Task.sleep(for: .seconds(seconds))
+                // iOS 15 没有 Task.sleep(for:)，用纳秒版本（见 BUILD 适配约定）
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             } catch is CancellationError {
                 return
             } catch {
